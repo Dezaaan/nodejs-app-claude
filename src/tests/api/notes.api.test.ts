@@ -18,7 +18,7 @@ describe("Notes API", () => {
   });
 
   it("creates a note", async () => {
-    const response = await request(app).post("/api/notes").send({
+    const response = await request(app).post("/api/v1/notes").send({
       title: "API note",
       content: "Created through HTTP",
     });
@@ -36,31 +36,37 @@ describe("Notes API", () => {
   });
 
   it("returns all notes", async () => {
-    await request(app).post("/api/notes").send({
+    await request(app).post("/api/v1/notes").send({
       title: "First note",
       content: "First content",
     });
 
-    await request(app).post("/api/notes").send({
+    await request(app).post("/api/v1/notes").send({
       title: "Second note",
       content: "Second content",
     });
 
-    const response = await request(app).get("/api/notes");
+    const response = await request(app).get("/api/v1/notes");
 
     expect(response.status).toBe(200);
-    expect(response.body).toHaveLength(2);
+    expect(response.body.items).toHaveLength(2);
+    expect(response.body.pagination).toEqual({
+      page: 1,
+      pageSize: 20,
+      totalItems: 2,
+      totalPages: 1,
+    });
   });
 
   it("returns a note by id", async () => {
-    const createResponse = await request(app).post("/api/notes").send({
+    const createResponse = await request(app).post("/api/v1/notes").send({
       title: "Specific note",
       content: "Specific content",
     });
 
     const id = createResponse.body.id;
 
-    const response = await request(app).get(`/api/notes/${id}`);
+    const response = await request(app).get(`/api/v1/notes/${id}`);
 
     expect(response.status).toBe(200);
 
@@ -72,7 +78,7 @@ describe("Notes API", () => {
   });
 
   it("returns 400 for invalid note input", async () => {
-    const response = await request(app).post("/api/notes").send({
+    const response = await request(app).post("/api/v1/notes").send({
       title: "",
       content: "",
     });
@@ -82,8 +88,27 @@ describe("Notes API", () => {
     expect(response.body.error.code).toBe("VALIDATION_ERROR");
   });
 
+  it("returns 400 for malformed JSON", async () => {
+    const response = await request(app)
+      .post("/api/v1/notes")
+      .set("content-type", "application/json")
+      .send("{bad");
+
+    expect(response.status).toBe(400);
+
+    expect(response.body.error.code).toBe("BAD_REQUEST");
+  });
+
+  it("returns 400 for an invalid note id", async () => {
+    const response = await request(app).get("/api/v1/notes/not-a-uuid");
+
+    expect(response.status).toBe(400);
+
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
   it("returns 404 when note does not exist", async () => {
-    const response = await request(app).get(`/api/notes/${randomUUID()}`);
+    const response = await request(app).get(`/api/v1/notes/${randomUUID()}`);
 
     expect(response.status).toBe(404);
 
@@ -104,13 +129,13 @@ describe("Notes API", () => {
   });
 
   it("updates a note", async () => {
-    const created = await request(app).post("/api/notes").send({
+    const created = await request(app).post("/api/v1/notes").send({
       title: "Original title",
       content: "Original content",
     });
 
     const response = await request(app)
-      .patch(`/api/notes/${created.body.id}`)
+      .patch(`/api/v1/notes/${created.body.id}`)
       .send({
         title: "Updated title",
       });
@@ -125,16 +150,20 @@ describe("Notes API", () => {
   });
 
   it("deletes a note", async () => {
-    const created = await request(app).post("/api/notes").send({
+    const created = await request(app).post("/api/v1/notes").send({
       title: "Delete me",
       content: "Content",
     });
 
-    const response = await request(app).delete(`/api/notes/${created.body.id}`);
+    const response = await request(app).delete(
+      `/api/v1/notes/${created.body.id}`,
+    );
 
     expect(response.status).toBe(204);
 
-    const getResponse = await request(app).get(`/api/notes/${created.body.id}`);
+    const getResponse = await request(app).get(
+      `/api/v1/notes/${created.body.id}`,
+    );
 
     expect(getResponse.status).toBe(404);
   });

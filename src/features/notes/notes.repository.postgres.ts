@@ -18,6 +18,10 @@ const sortColumnMap = {
   title: "title",
 } as const;
 
+// Escapes LIKE metacharacters so user input only matches literally.
+const toContainsPattern = (value: string): string =>
+  `%${value.replace(/[\\%_]/g, "\\$&")}%`;
+
 export const createPostgresNotesRepository = ({
   database,
 }: CreatePostgresNotesRepositoryDependencies): NotesRepository => {
@@ -28,7 +32,7 @@ export const createPostgresNotesRepository = ({
     const params: unknown[] = [];
 
     if (options.search) {
-      params.push(`%${options.search}%`);
+      params.push(toContainsPattern(options.search));
 
       const parameterIndex = params.length;
 
@@ -41,7 +45,7 @@ export const createPostgresNotesRepository = ({
     }
 
     if (options.title) {
-      params.push(`%${options.title}%`);
+      params.push(toContainsPattern(options.title));
 
       conditions.push(`title ILIKE $${params.length}`);
     }
@@ -69,7 +73,7 @@ export const createPostgresNotesRepository = ({
             updated_at
           FROM notes
           ${whereClause}
-          ORDER BY ${sortColumn} ${sortOrder}
+          ORDER BY ${sortColumn} ${sortOrder}, id ${sortOrder}
           LIMIT $${limitIndex}
           OFFSET $${offsetIndex}
         `,
@@ -145,8 +149,8 @@ export const createPostgresNotesRepository = ({
       `
       UPDATE notes
       SET
-        title = $2,
-        content = $3,
+        title = COALESCE($2, title),
+        content = COALESCE($3, content),
         updated_at = $4
       WHERE id = $1
       RETURNING
@@ -156,7 +160,7 @@ export const createPostgresNotesRepository = ({
         created_at,
         updated_at
     `,
-      [note.id, note.title, note.content, note.updatedAt],
+      [note.id, note.title ?? null, note.content ?? null, note.updatedAt],
     );
 
     const row = result.rows[0];

@@ -23,8 +23,8 @@ export const noteIdParamsSchema = z.object({
 export const notesQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(100).default(20),
-  search: z.string().trim().min(1).optional(),
-  title: z.string().trim().min(1).optional(),
+  search: z.string().trim().min(1).max(200).optional(),
+  title: z.string().trim().min(1).max(200).optional(),
   sortBy: z.enum(["createdAt", "updatedAt", "title"]).default("createdAt"),
   sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });

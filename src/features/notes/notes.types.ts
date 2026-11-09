@@ -6,7 +6,11 @@ export type Note = {
   updatedAt: Date;
 };
 
-export type UpdateNoteData = Omit<Note, "createdAt">;
+// An undefined title or content leaves the stored value unchanged.
+export type UpdateNoteData = Pick<Note, "id" | "updatedAt"> & {
+  title: string | undefined;
+  content: string | undefined;
+};
 
 export type NotesSortField = "createdAt" | "updatedAt" | "title";
 

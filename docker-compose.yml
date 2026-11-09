@@ -3,7 +3,7 @@ services:
     image: postgres:17
     container_name: nodejs-postgres
     environment:
-      POSTGRES_DB: nodejs_app
+      POSTGRES_DB: nodejs_app_claude
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:

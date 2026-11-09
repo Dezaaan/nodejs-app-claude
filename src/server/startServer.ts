@@ -1,6 +1,8 @@
 import type { Express } from "express";
 import { AppContainer } from "../app/container.types.js";
 
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+
 type StartServerDependencies = {
   app: Express;
   container: AppContainer;
@@ -40,6 +42,15 @@ export const startServer = ({ app, container }: StartServerDependencies) => {
     logger.info("Shutdown started", {
       signal,
     });
+
+    // unref() so this timer alone never keeps the process alive.
+    setTimeout(() => {
+      logger.error("Shutdown timed out, forcing exit", {
+        timeoutMs: SHUTDOWN_TIMEOUT_MS,
+      });
+
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS).unref();
 
     server.close(async (serverError) => {
       if (serverError) {

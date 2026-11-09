@@ -75,16 +75,10 @@ export const createNotesService = ({
     id: string,
     input: UpdateNoteInput,
   ): Promise<Note> => {
-    const existingNote = await notesRepository.findById(id);
-
-    if (!existingNote) {
-      throw new NotFoundError("Note not found");
-    }
-
     const updatedNote = await notesRepository.update({
       id,
-      title: input.title ?? existingNote.title,
-      content: input.content ?? existingNote.content,
+      title: input.title,
+      content: input.content,
       updatedAt: new Date(),
     });
 
