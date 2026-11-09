@@ -3,8 +3,26 @@ import { ZodError } from "zod";
 import { Logger } from "../../infrastructure/createLogger.js";
 import { AppError } from "./AppError.js";
 
+// Errors raised by express.json() (malformed JSON, body too large, ...)
+const getBodyParserErrorStatus = (error: unknown): number | undefined => {
+  if (typeof error !== "object" || error === null) {
+    return undefined;
+  }
+
+  const { status, expose } = error as { status?: unknown; expose?: unknown };
+
+  return typeof status === "number" && expose === true ? status : undefined;
+};
+
 export const createErrorMiddleware = (logger: Logger): ErrorRequestHandler => {
-  return (error, request, response) => {
+  // Express only recognizes error handlers that declare all 4 parameters.
+  return (error, request, response, next) => {
+    if (response.headersSent) {
+      next(error);
+
+      return;
+    }
+
     if (error instanceof AppError) {
       response.status(error.statusCode).json({
         error: {
@@ -22,6 +40,23 @@ export const createErrorMiddleware = (logger: Logger): ErrorRequestHandler => {
           code: "VALIDATION_ERROR",
           details: error.flatten(),
           message: "Invalid request data",
+        },
+      });
+
+      return;
+    }
+
+    const bodyParserErrorStatus = getBodyParserErrorStatus(error);
+
+    if (bodyParserErrorStatus !== undefined) {
+      const isTooLarge = bodyParserErrorStatus === 413;
+
+      response.status(bodyParserErrorStatus).json({
+        error: {
+          code: isTooLarge ? "PAYLOAD_TOO_LARGE" : "BAD_REQUEST",
+          message: isTooLarge
+            ? "Request body is too large"
+            : "Request could not be processed",
         },
       });
 

@@ -12,7 +12,17 @@ export const startServer = ({ app, container }: StartServerDependencies) => {
     infrastructure: { database, logger },
   } = container;
 
-  const server = app.listen(config.app.port, () => {
+  // Express 5 also calls this callback when listening fails.
+  const server = app.listen(config.app.port, (error) => {
+    if (error) {
+      logger.error("Failed to start HTTP server", {
+        error,
+        port: config.app.port,
+      });
+
+      process.exit(1);
+    }
+
     logger.info("Application started", {
       port: config.app.port,
       environment: config.app.environment,

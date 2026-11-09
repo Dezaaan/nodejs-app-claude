@@ -8,19 +8,35 @@ export type Logger = {
 
 type LogLevel = "info" | "warn" | "error";
 
+// JSON.stringify drops an Error's message and stack (they are non-enumerable).
+const serializeErrors = (_key: string, value: unknown): unknown => {
+  if (!(value instanceof Error)) {
+    return value;
+  }
+
+  return {
+    ...value,
+    name: value.name,
+    message: value.message,
+    stack: value.stack,
+    ...(value.cause !== undefined && { cause: value.cause }),
+  };
+};
+
 const log = (
   level: LogLevel,
   message: string,
   metadata?: LogMetadata,
 ): void => {
+  // Metadata goes first so it can't overwrite the reserved fields.
   const entry = {
+    ...metadata,
     timestamp: new Date().toISOString(),
     level,
     message,
-    ...metadata,
   };
 
-  const serialized = JSON.stringify(entry);
+  const serialized = JSON.stringify(entry, serializeErrors);
 
   switch (level) {
     case "error":

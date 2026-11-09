@@ -5,8 +5,8 @@ import { createDatabase } from "./database/database.js";
 export type Infrastructure = ReturnType<typeof createInfrastructure>;
 
 export const createInfrastructure = (config: AppConfig) => {
-  const database = createDatabase(config.database);
   const logger = createLogger();
+  const database = createDatabase(config.database, logger);
 
   return {
     database,

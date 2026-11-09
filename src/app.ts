@@ -31,11 +31,6 @@ export const createApp = (container: AppContainer) => {
     }),
   );
 
-  app.use((request, _response, next) => {
-    console.log("Incoming request:", request.method, request.url);
-    next();
-  });
-
   app.use(express.json());
 
   app.get("/health", (_request, response) => {
