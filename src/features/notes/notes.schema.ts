@@ -12,6 +12,7 @@ export const updateNoteSchema = z
     title: z.string().trim().min(1).max(200).optional(),
     content: z.string().trim().min(1).optional(),
   })
+  .strict()
   .refine((data) => data.title !== undefined || data.content !== undefined, {
     message: "At least one field must be provided",
   });

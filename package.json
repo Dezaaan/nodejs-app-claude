@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "db:create-migration": "node-pg-migrate create -m database/migrations",
-    "db:migrate": "node-pg-migrate --env-file=.env up -m database/migrations",
+    "db:migrate": "node-pg-migrate --envPath=.env up -m database/migrations",
     "db:migrate:test": "node --env-file=.env.test ./node_modules/node-pg-migrate/bin/node-pg-migrate up -m database/migrations",
-    "db:rollback": "node-pg-migrate --env-file=.env down -m database/migrations",
+    "db:rollback": "node-pg-migrate --envPath=.env down -m database/migrations",
     "dev": "tsx watch src/index.ts",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
@@ -29,6 +29,7 @@
     "express-rate-limit": "^8.7.0",
     "helmet": "^8.3.0",
     "pg": "^8.23.0",
+    "pino": "^10.4.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {

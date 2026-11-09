@@ -1,6 +1,6 @@
-import { ErrorRequestHandler } from "express";
-import { ZodError } from "zod";
-import { Logger } from "../../infrastructure/createLogger.js";
+import type { ErrorRequestHandler } from "express";
+import { z, ZodError } from "zod";
+import type { Logger } from "../../infrastructure/createLogger.js";
 import { AppError } from "./AppError.js";
 
 // Errors raised by express.json() (malformed JSON, body too large, ...)
@@ -38,7 +38,7 @@ export const createErrorMiddleware = (logger: Logger): ErrorRequestHandler => {
       response.status(400).json({
         error: {
           code: "VALIDATION_ERROR",
-          details: error.flatten(),
+          details: z.flattenError(error),
           message: "Invalid request data",
         },
       });

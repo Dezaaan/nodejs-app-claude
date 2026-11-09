@@ -3,7 +3,7 @@ import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createPostgresNotesRepository } from "../../features/notes/notes.repository.postgres.js";
-import { Note } from "../../features/notes/notes.types.js";
+import type { Note } from "../../features/notes/notes.types.js";
 import { createTestDatabase } from "../helpers/createTestDatabase.js";
 
 const database = createTestDatabase();

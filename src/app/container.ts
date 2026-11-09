@@ -4,11 +4,11 @@ import { createInfrastructure } from "../infrastructure/createInfrastructure.js"
 
 export const createContainer = (config: AppConfig) => {
   const infrastructure = createInfrastructure(config);
-  const feature = createFeatures(infrastructure);
+  const features = createFeatures(infrastructure);
 
   return {
     config,
     infrastructure,
-    features: feature,
+    features,
   };
 };

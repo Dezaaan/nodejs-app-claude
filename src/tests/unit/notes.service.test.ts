@@ -1,5 +1,5 @@
 import { createNotesService } from "../../features/notes/notes.service.js";
-import { NotesRepository } from "../../features/notes/notes.repository.js";
+import type { NotesRepository } from "../../features/notes/notes.repository.js";
 import { createTestLogger } from "../helpers/createTestLogger.js";
 import { describe, expect, it, vi } from "vitest";
 

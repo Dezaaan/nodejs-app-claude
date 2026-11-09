@@ -1,4 +1,5 @@
-import { AppConfig, createConfig } from "../../config/config.js";
+import type { AppConfig } from "../../config/config.js";
+import { createConfig } from "../../config/config.js";
 import { createEnv } from "../../config/env.js";
 
 export const createTestConfig = (): AppConfig => {

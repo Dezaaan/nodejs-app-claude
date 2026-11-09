@@ -22,7 +22,7 @@ const start = async (): Promise<void> => {
 };
 
 start().catch((error: unknown) => {
-  createLogger().error("Application failed to start", {
+  createLogger({ level: "error" }).error("Application failed to start", {
     error,
   });
 

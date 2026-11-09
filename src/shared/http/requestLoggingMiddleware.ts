@@ -1,5 +1,5 @@
 import type { RequestHandler } from "express";
-import { Logger } from "../../infrastructure/createLogger.js";
+import type { Logger } from "../../infrastructure/createLogger.js";
 
 export const createRequestLoggingMiddleware = (
   logger: Logger,

@@ -1,12 +1,19 @@
 import type { Database } from "../../infrastructure/database/database.types.js";
-import { mapNoteRowToDomain } from "./notes.mapper.js";
-import { NotesRepository } from "./notes.repository.js";
+import type { NotesRepository } from "./notes.repository.js";
 import type { Note, NotesQueryOptions, UpdateNoteData } from "./notes.types.js";
 
-export type NoteRow = Pick<Note, "id" | "title" | "content"> & {
+type NoteRow = Pick<Note, "id" | "title" | "content"> & {
   created_at: Date;
   updated_at: Date;
 };
+
+const mapNoteRowToDomain = (row: NoteRow): Note => ({
+  id: row.id,
+  title: row.title,
+  content: row.content,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
 
 type CreatePostgresNotesRepositoryDependencies = {
   database: Database;

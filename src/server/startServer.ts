@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import { AppContainer } from "../app/container.types.js";
+import type { AppContainer } from "../app/container.types.js";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
@@ -33,7 +33,25 @@ export const startServer = ({ app, container }: StartServerDependencies) => {
 
   let isShuttingDown = false;
 
-  const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
+  const closeDatabaseAndExit = async (): Promise<void> => {
+    try {
+      await database.close();
+
+      logger.info("Database connection closed");
+
+      logger.info("Application stopped successfully");
+
+      process.exit(0);
+    } catch (error) {
+      logger.error("Failed during application shutdown", {
+        error,
+      });
+
+      process.exit(1);
+    }
+  };
+
+  const shutdown = (signal: NodeJS.Signals): void => {
     if (isShuttingDown) {
       return;
     }
@@ -52,7 +70,7 @@ export const startServer = ({ app, container }: StartServerDependencies) => {
       process.exit(1);
     }, SHUTDOWN_TIMEOUT_MS).unref();
 
-    server.close(async (serverError) => {
+    server.close((serverError) => {
       if (serverError) {
         logger.error("Failed to close HTTP server", {
           error: serverError,
@@ -61,30 +79,16 @@ export const startServer = ({ app, container }: StartServerDependencies) => {
         process.exit(1);
       }
 
-      try {
-        await database.close();
-
-        logger.info("Database connection closed");
-
-        logger.info("Application stopped successfully");
-
-        process.exit(0);
-      } catch (error) {
-        logger.error("Failed during application shutdown", {
-          error,
-        });
-
-        process.exit(1);
-      }
+      void closeDatabaseAndExit();
     });
   };
 
   process.on("SIGINT", () => {
-    void shutdown("SIGINT");
+    shutdown("SIGINT");
   });
 
   process.on("SIGTERM", () => {
-    void shutdown("SIGTERM");
+    shutdown("SIGTERM");
   });
 
   return server;

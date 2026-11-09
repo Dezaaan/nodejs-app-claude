@@ -1,15 +1,6 @@
-import { NoteResponseDto } from "./notes.dto.js";
-import { NoteRow } from "./notes.repository.postgres.js";
-import { NotesQuery } from "./notes.schema.js";
+import type { NoteResponseDto } from "./notes.dto.js";
+import type { NotesQuery } from "./notes.schema.js";
 import type { Note, NotesQueryOptions } from "./notes.types.js";
-
-export const mapNoteRowToDomain = (row: NoteRow): Note => ({
-  id: row.id,
-  title: row.title,
-  content: row.content,
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-});
 
 export const mapNoteToResponseDto = (note: Note): NoteResponseDto => ({
   id: note.id,
