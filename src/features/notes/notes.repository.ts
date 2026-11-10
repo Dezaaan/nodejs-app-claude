@@ -1,4 +1,4 @@
-import { Note, NotesQueryOptions, UpdateNoteData } from "./notes.types.js";
+import type { Note, NotesQueryOptions, UpdateNoteData } from "./notes.types.js";
 
 export type NotesRepository = {
   create(note: Note): Promise<Note>;

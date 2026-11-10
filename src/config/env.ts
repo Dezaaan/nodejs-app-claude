@@ -15,7 +15,13 @@ const envSchema = z.object({
         value.startsWith("postgres://") || value.startsWith("postgresql://"),
       "DATABASE_URL must be a PostgreSQL connection string",
     ),
-  CLIENT_ORIGIN: z.string().url(),
+  CLIENT_ORIGIN: z.url(),
+
+  TRUST_PROXY_HOPS: z.coerce.number().int().nonnegative().default(0),
+
+  LOG_LEVEL: z
+    .enum(["debug", "info", "warn", "error", "silent"])
+    .default("info"),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -25,7 +31,7 @@ export const createEnv = (): Env => {
   if (!result.success) {
     console.error(
       "Invalid environment variables:",
-      result.error.flatten().fieldErrors,
+      z.flattenError(result.error).fieldErrors,
     );
 
     throw new Error("Invalid environment configuration");

@@ -1,32 +1,25 @@
-import type { Request, Response } from "express";
+import type { RequestHandler } from "express";
 
+import { mapPaginatedResult } from "../../shared/mapping/mapPaginatedResult.js";
+import { validatedHandler } from "../../shared/http/validatedHandler.js";
 import {
-  CreateNoteInput,
-  NoteIdParams,
-  UpdateNoteInput,
+  mapNotesQueryToOptions,
+  mapNoteToResponseDto,
+} from "./notes.mapper.js";
+import {
+  createNoteSchema,
+  noteIdParamsSchema,
+  notesQuerySchema,
+  updateNoteSchema,
 } from "./notes.schema.js";
-import type { NextFunction } from "express-serve-static-core";
-import { mapNoteToResponseDto } from "./notes.mapper.js";
-import { NotesService } from "./notes.service.js";
-import { NotesQueryOptions } from "./notes.types.js";
-import {
-  getValidatedBody,
-  getValidatedParams,
-  getValidatedQuery,
-} from "../../shared/validation/validatedRequest.js";
-
-type ControllerHandler = (
-  request: Request,
-  response: Response,
-  next: NextFunction,
-) => Promise<void>;
+import type { NotesService } from "./notes.service.js";
 
 export type NotesController = {
-  getNotes: ControllerHandler;
-  getNoteById: ControllerHandler;
-  createNote: ControllerHandler;
-  updateNote: ControllerHandler;
-  deleteNote: ControllerHandler;
+  getNotes: RequestHandler;
+  getNoteById: RequestHandler;
+  createNote: RequestHandler;
+  updateNote: RequestHandler;
+  deleteNote: RequestHandler;
 };
 
 type CreateNotesControllerDependencies = {
@@ -36,59 +29,52 @@ type CreateNotesControllerDependencies = {
 export const createNotesController = ({
   notesService,
 }: CreateNotesControllerDependencies): NotesController => {
-  const getNotes = async (
-    request: Request,
-    response: Response,
-  ): Promise<void> => {
-    const query = getValidatedQuery<NotesQueryOptions>(request);
+  const getNotes = validatedHandler(
+    { query: notesQuerySchema },
+    async ({ query }, response) => {
+      const result = await notesService.getNotes(mapNotesQueryToOptions(query));
 
-    const result = await notesService.getNotes(query);
+      response
+        .status(200)
+        .json(mapPaginatedResult(result, mapNoteToResponseDto));
+    },
+  );
 
-    response.status(200).json(result);
-  };
+  const getNoteById = validatedHandler(
+    { params: noteIdParamsSchema },
+    async ({ params }, response) => {
+      const note = await notesService.getNoteById(params.id);
 
-  const getNoteById = async (
-    request: Request,
-    response: Response,
-  ): Promise<void> => {
-    const { id } = getValidatedParams<NoteIdParams>(request);
-    const note = await notesService.getNoteById(id);
+      response.status(200).json(mapNoteToResponseDto(note));
+    },
+  );
 
-    response.status(200).json(mapNoteToResponseDto(note));
-  };
+  const createNote = validatedHandler(
+    { body: createNoteSchema },
+    async ({ body }, response) => {
+      const note = await notesService.createNote(body);
 
-  const createNote = async (
-    request: Request,
-    response: Response,
-  ): Promise<void> => {
-    const body = getValidatedBody<CreateNoteInput>(request);
+      response.status(201).json(mapNoteToResponseDto(note));
+    },
+  );
 
-    const note = await notesService.createNote(body);
+  const updateNote = validatedHandler(
+    { params: noteIdParamsSchema, body: updateNoteSchema },
+    async ({ params, body }, response) => {
+      const note = await notesService.updateNote(params.id, body);
 
-    response.status(201).json(mapNoteToResponseDto(note));
-  };
+      response.status(200).json(mapNoteToResponseDto(note));
+    },
+  );
 
-  const updateNote = async (
-    request: Request,
-    response: Response,
-  ): Promise<void> => {
-    const { id } = getValidatedParams<NoteIdParams>(request);
-    const body = getValidatedBody<UpdateNoteInput>(request);
+  const deleteNote = validatedHandler(
+    { params: noteIdParamsSchema },
+    async ({ params }, response) => {
+      await notesService.deleteNote(params.id);
 
-    const note = await notesService.updateNote(id, body);
-
-    response.status(200).json(mapNoteToResponseDto(note));
-  };
-
-  const deleteNote = async (
-    request: Request,
-    response: Response,
-  ): Promise<void> => {
-    const { id } = getValidatedParams<NoteIdParams>(request);
-    await notesService.deleteNote(id);
-
-    response.status(204).send();
-  };
+      response.status(204).send();
+    },
+  );
 
   return {
     createNote,

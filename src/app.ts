@@ -9,15 +9,18 @@ import { notFoundMiddleware } from "./shared/errors/notFoundMiddleware.js";
 import { rateLimit } from "express-rate-limit";
 import { requestIdMiddleware } from "./shared/http/requestIdMiddleware.js";
 
-const apiRateLimiter = rateLimit({
-  windowMs: 60_000,
-  limit: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 export const createApp = (container: AppContainer) => {
   const app = express();
+
+  // Rate limiting needs the real client IP when running behind a proxy.
+  app.set("trust proxy", container.config.app.trustProxyHops);
+
+  const apiRateLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
 
   app.use(createRequestLoggingMiddleware(container.infrastructure.logger));
 
@@ -30,11 +33,6 @@ export const createApp = (container: AppContainer) => {
       origin: container.config.cors.origin,
     }),
   );
-
-  app.use((request, _response, next) => {
-    console.log("Incoming request:", request.method, request.url);
-    next();
-  });
 
   app.use(express.json());
 

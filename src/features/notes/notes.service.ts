@@ -1,9 +1,9 @@
 import type { Note, NotesQueryOptions } from "./notes.types.js";
-import { CreateNoteInput, UpdateNoteInput } from "./notes.schema.js";
-import { Logger } from "../../infrastructure/createLogger.js";
+import type { CreateNoteInput, UpdateNoteInput } from "./notes.schema.js";
+import type { Logger } from "../../infrastructure/createLogger.js";
 import { NotFoundError } from "../../shared/errors/NotFoundError.js";
-import { NotesRepository } from "./notes.repository.js";
-import { PaginatedResult } from "../../shared/pagination/pagination.types.js";
+import type { NotesRepository } from "./notes.repository.js";
+import type { PaginatedResult } from "../../shared/pagination/pagination.types.js";
 import { createPaginatedResult } from "../../shared/pagination/createPaginatedResult.js";
 
 export type NotesService = {
@@ -75,16 +75,10 @@ export const createNotesService = ({
     id: string,
     input: UpdateNoteInput,
   ): Promise<Note> => {
-    const existingNote = await notesRepository.findById(id);
-
-    if (!existingNote) {
-      throw new NotFoundError("Note not found");
-    }
-
     const updatedNote = await notesRepository.update({
       id,
-      title: input.title ?? existingNote.title,
-      content: input.content ?? existingNote.content,
+      title: input.title,
+      content: input.content,
       updatedAt: new Date(),
     });
 

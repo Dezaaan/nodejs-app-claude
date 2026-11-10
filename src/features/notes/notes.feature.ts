@@ -1,8 +1,10 @@
-import { Logger } from "../../infrastructure/createLogger.js";
-import { Database } from "../../infrastructure/database/database.types.js";
-import { createNotesController, NotesController } from "./notes.controller.js";
+import type { Logger } from "../../infrastructure/createLogger.js";
+import type { Database } from "../../infrastructure/database/database.types.js";
+import type { NotesController } from "./notes.controller.js";
+import { createNotesController } from "./notes.controller.js";
 import { createPostgresNotesRepository } from "./notes.repository.postgres.js";
-import { createNotesService, NotesService } from "./notes.service.js";
+import type { NotesService } from "./notes.service.js";
+import { createNotesService } from "./notes.service.js";
 
 export type NotesFeature = {
   service: NotesService;
@@ -17,7 +19,7 @@ type CreateNotesFeatureDependencies = {
 export const createNotesFeature = ({
   database,
   logger,
-}: CreateNotesFeatureDependencies) => {
+}: CreateNotesFeatureDependencies): NotesFeature => {
   const repository = createPostgresNotesRepository({
     database,
   });
