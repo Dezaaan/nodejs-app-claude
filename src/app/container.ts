@@ -4,7 +4,7 @@ import { createInfrastructure } from "../infrastructure/createInfrastructure.js"
 
 export const createContainer = (config: AppConfig) => {
   const infrastructure = createInfrastructure(config);
-  const features = createFeatures(infrastructure);
+  const features = createFeatures(infrastructure, config);
 
   return {
     config,

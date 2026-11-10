@@ -1,16 +1,18 @@
-import "dotenv/config";
-
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { createPostgresUsersRepository } from "../../features/auth/auth.repository.postgres.js";
 import { createPostgresNotesRepository } from "../../features/notes/notes.repository.postgres.js";
 import type { Note } from "../../features/notes/notes.types.js";
 import { createTestDatabase } from "../helpers/createTestDatabase.js";
+import { resetDatabase } from "../helpers/resetDatabase.js";
 
 const database = createTestDatabase();
 
 const repository = createPostgresNotesRepository({
   database,
 });
+
+const usersRepository = createPostgresUsersRepository({ database });
 
 const defaultOptions = {
   page: 1,
@@ -19,9 +21,40 @@ const defaultOptions = {
   sortOrder: "desc",
 } as const;
 
+const createUser = async (): Promise<string> => {
+  const now = new Date();
+  const user = await usersRepository.create({
+    id: randomUUID(),
+    email: `user-${randomUUID()}@example.com`,
+    passwordHash: "not-a-real-hash",
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return user!.id;
+};
+
 describe("PostgresNotesRepository", () => {
+  let userId: string;
+
+  const buildNote = (overrides: Partial<Note> = {}): Note => {
+    const now = new Date();
+
+    return {
+      id: randomUUID(),
+      userId,
+      title: "Title",
+      content: "Content",
+      createdAt: now,
+      updatedAt: now,
+      ...overrides,
+    };
+  };
+
   beforeEach(async () => {
-    await database.query("DELETE FROM notes");
+    await resetDatabase(database);
+
+    userId = await createUser();
   });
 
   afterAll(async () => {
@@ -29,43 +62,21 @@ describe("PostgresNotesRepository", () => {
   });
 
   it("creates a note", async () => {
-    const now = new Date();
-
-    const note: Note = {
-      id: randomUUID(),
+    const note = buildNote({
       title: "Integration test",
       content: "PostgreSQL content",
-      createdAt: now,
-      updatedAt: now,
-    };
+    });
 
     const result = await repository.create(note);
 
-    expect(result.id).toBe(note.id);
-    expect(result.title).toBe(note.title);
-    expect(result.content).toBe(note.content);
+    expect(result).toEqual(note);
   });
 
   it("finds all notes", async () => {
-    const now = new Date();
+    await repository.create(buildNote({ title: "Note one" }));
+    await repository.create(buildNote({ title: "Note two" }));
 
-    await repository.create({
-      id: randomUUID(),
-      title: "Note one",
-      content: "Content one",
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    await repository.create({
-      id: randomUUID(),
-      title: "Note two",
-      content: "Content two",
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    const result = await repository.findMany(defaultOptions);
+    const result = await repository.findMany(userId, defaultOptions);
 
     expect(result.items).toHaveLength(2);
     expect(result.totalItems).toBe(2);
@@ -76,19 +87,15 @@ describe("PostgresNotesRepository", () => {
 
     await Promise.all(
       Array.from({ length: 6 }, (_, index) =>
-        repository.create({
-          id: randomUUID(),
-          title: `Note ${index}`,
-          content: "Content",
-          createdAt: now,
-          updatedAt: now,
-        }),
+        repository.create(
+          buildNote({ title: `Note ${index}`, createdAt: now, updatedAt: now }),
+        ),
       ),
     );
 
     const pages = await Promise.all(
       [1, 2, 3].map((page) =>
-        repository.findMany({ ...defaultOptions, page, pageSize: 2 }),
+        repository.findMany(userId, { ...defaultOptions, page, pageSize: 2 }),
       ),
     );
 
@@ -98,25 +105,10 @@ describe("PostgresNotesRepository", () => {
   });
 
   it("treats LIKE wildcards in search as literal text", async () => {
-    const now = new Date();
+    await repository.create(buildNote({ title: "100% done" }));
+    await repository.create(buildNote({ title: "100 items" }));
 
-    await repository.create({
-      id: randomUUID(),
-      title: "100% done",
-      content: "Content",
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    await repository.create({
-      id: randomUUID(),
-      title: "100 items",
-      content: "Content",
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    const result = await repository.findMany({
+    const result = await repository.findMany(userId, {
       ...defaultOptions,
       search: "100%",
     });
@@ -125,61 +117,67 @@ describe("PostgresNotesRepository", () => {
   });
 
   it("keeps both changes when partial updates run concurrently", async () => {
-    const now = new Date();
-    const id = randomUUID();
-
-    await repository.create({
-      id,
-      title: "Original title",
-      content: "Original content",
-      createdAt: now,
-      updatedAt: now,
-    });
+    const note = await repository.create(
+      buildNote({ title: "Original title", content: "Original content" }),
+    );
 
     await Promise.all([
       repository.update({
-        id,
+        id: note.id,
+        userId,
         title: "New title",
         content: undefined,
-        updatedAt: now,
+        updatedAt: new Date(),
       }),
       repository.update({
-        id,
+        id: note.id,
+        userId,
         title: undefined,
         content: "New content",
-        updatedAt: now,
+        updatedAt: new Date(),
       }),
     ]);
 
-    const result = await repository.findById(id);
+    const result = await repository.findById(userId, note.id);
 
     expect(result?.title).toBe("New title");
     expect(result?.content).toBe("New content");
   });
 
   it("finds a note by id", async () => {
-    const now = new Date();
+    const note = await repository.create(buildNote({ title: "Find me" }));
 
-    const note: Note = {
-      id: randomUUID(),
-      title: "Find me",
-      content: "Content",
-      createdAt: now,
-      updatedAt: now,
-    };
+    const result = await repository.findById(userId, note.id);
 
-    await repository.create(note);
-
-    const result = await repository.findById(note.id);
-
-    expect(result).not.toBeNull();
     expect(result?.id).toBe(note.id);
     expect(result?.title).toBe("Find me");
   });
 
   it("returns null when note does not exist", async () => {
-    const result = await repository.findById(randomUUID());
+    const result = await repository.findById(userId, randomUUID());
 
     expect(result).toBeNull();
+  });
+
+  it("only reads and changes the given user's notes", async () => {
+    const otherUserId = await createUser();
+    const note = await repository.create(buildNote());
+
+    expect(await repository.findById(otherUserId, note.id)).toBeNull();
+    expect(
+      (await repository.findMany(otherUserId, defaultOptions)).totalItems,
+    ).toBe(0);
+    expect(
+      await repository.update({
+        id: note.id,
+        userId: otherUserId,
+        title: "Hijacked",
+        content: undefined,
+        updatedAt: new Date(),
+      }),
+    ).toBeNull();
+    expect(await repository.deleteById(otherUserId, note.id)).toBe(false);
+
+    expect((await repository.findById(userId, note.id))?.title).toBe("Title");
   });
 });

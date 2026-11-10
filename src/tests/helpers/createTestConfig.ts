@@ -20,5 +20,12 @@ export const createTestConfig = (): AppConfig => {
     );
   }
 
-  return config;
+  return {
+    ...config,
+    // Tests send many requests from one IP within a minute.
+    rateLimit: {
+      apiPerMinute: 10_000,
+      authPerMinute: 10_000,
+    },
+  };
 };

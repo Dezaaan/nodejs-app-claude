@@ -1,4 +1,4 @@
-import type { RequestHandler, Response } from "express";
+import type { Request, RequestHandler, Response } from "express";
 import type { output, ZodType } from "zod";
 
 type RequestSchemas = {
@@ -20,6 +20,7 @@ export const validatedHandler = <TSchemas extends RequestSchemas>(
   handler: (
     input: ValidatedInput<TSchemas>,
     response: Response,
+    request: Request,
   ) => Promise<void>,
 ): RequestHandler => {
   return async (request, response) => {
@@ -29,6 +30,6 @@ export const validatedHandler = <TSchemas extends RequestSchemas>(
       ...(schemas.body && { body: schemas.body.parse(request.body) }),
     };
 
-    await handler(input as ValidatedInput<TSchemas>, response);
+    await handler(input as ValidatedInput<TSchemas>, response, request);
   };
 };

@@ -1,3 +1,4 @@
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
@@ -17,7 +18,7 @@ export const createApp = (container: AppContainer) => {
 
   const apiRateLimiter = rateLimit({
     windowMs: 60_000,
-    limit: 100,
+    limit: container.config.rateLimit.apiPerMinute,
     standardHeaders: true,
     legacyHeaders: false,
   });
@@ -31,10 +32,14 @@ export const createApp = (container: AppContainer) => {
   app.use(
     cors({
       origin: container.config.cors.origin,
+      // Lets the frontend send and receive the refresh token cookie.
+      credentials: true,
     }),
   );
 
   app.use(express.json());
+
+  app.use(cookieParser());
 
   app.get("/health", (_request, response) => {
     response.json({
