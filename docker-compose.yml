@@ -11,5 +11,16 @@ services:
     volumes:
       - nodejs_postgres_data:/var/lib/postgresql/data
 
+  # Database browser for local development: http://localhost:8080
+  adminer:
+    image: adminer:5
+    container_name: nodejs-adminer
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - postgres
+
 volumes:
   nodejs_postgres_data:

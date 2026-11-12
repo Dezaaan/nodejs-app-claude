@@ -4,6 +4,7 @@ import type {
   StoredRefreshToken,
   User,
 } from "./auth.types.js";
+import type { Role } from "../../shared/auth/permissions.js";
 
 export type UsersRepository = {
   // Returns null when the email is already registered.
@@ -12,6 +13,9 @@ export type UsersRepository = {
   findByEmail(email: string): Promise<User | null>;
 
   findById(id: string): Promise<User | null>;
+
+  // Returns null when no user has this email.
+  updateRole(email: string, role: Role, now: Date): Promise<User | null>;
 };
 
 export type RefreshTokensRepository = {

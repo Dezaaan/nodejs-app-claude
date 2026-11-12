@@ -1,4 +1,9 @@
 import type { RequestHandler, Response } from "express";
+import {
+  getPermissions,
+  type Permission,
+  type Role,
+} from "../../shared/auth/permissions.js";
 import { getAuth } from "../../shared/http/authContext.js";
 import { validatedHandler } from "../../shared/http/validatedHandler.js";
 import {
@@ -13,13 +18,24 @@ import type { AuthSession, User } from "./auth.types.js";
 export type UserResponseDto = {
   id: string;
   email: string;
+  role: Role;
   createdAt: string;
 };
 
 const mapUserToResponseDto = (user: User): UserResponseDto => ({
   id: user.id,
   email: user.email,
+  role: user.role,
   createdAt: user.createdAt.toISOString(),
+});
+
+// What the user may do, sent so the frontend can show or hide actions.
+// The API checks the same permissions on every request.
+const describeUser = (
+  user: User,
+): { user: UserResponseDto; permissions: Permission[] } => ({
+  user: mapUserToResponseDto(user),
+  permissions: getPermissions(user.role),
 });
 
 export type AuthController = {
@@ -55,7 +71,7 @@ export const createAuthController = ({
     );
 
     response.status(statusCode).json({
-      user: mapUserToResponseDto(session.user),
+      ...describeUser(session.user),
       accessToken: session.accessToken,
       accessTokenExpiresIn: accessTokenTtlSeconds,
     });
@@ -101,7 +117,7 @@ export const createAuthController = ({
   const me = validatedHandler({}, async (_input, response) => {
     const user = await authService.getCurrentUser(getAuth(response).userId);
 
-    response.status(200).json({ user: mapUserToResponseDto(user) });
+    response.status(200).json(describeUser(user));
   });
 
   return {
