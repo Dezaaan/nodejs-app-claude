@@ -21,6 +21,8 @@ npm run dev
 
 The app listens on the `PORT` set in `.env`.
 
+To browse the database, run `docker compose up -d adminer` and open http://localhost:8080. Log in as `postgres` / `postgres` with the system set to PostgreSQL, the server set to `postgres` and the database set to `nodejs_app_claude`.
+
 ## API
 
 | Method   | Path                    | Description                           |
