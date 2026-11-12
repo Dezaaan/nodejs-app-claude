@@ -4,24 +4,34 @@ import type {
   UsersRepository,
 } from "./auth.repository.js";
 import type { User } from "./auth.types.js";
+import { isRole } from "../../shared/auth/permissions.js";
 
 type UserRow = {
   id: string;
   email: string;
   password_hash: string;
+  role: string;
   created_at: Date;
   updated_at: Date;
 };
 
-const mapUserRowToDomain = (row: UserRow): User => ({
-  id: row.id,
-  email: row.email,
-  passwordHash: row.password_hash,
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-});
+const mapUserRowToDomain = (row: UserRow): User => {
+  // The database check constraint and this list must agree.
+  if (!isRole(row.role)) {
+    throw new Error(`Unknown role "${row.role}" for user ${row.id}`);
+  }
 
-const USER_COLUMNS = "id, email, password_hash, created_at, updated_at";
+  return {
+    id: row.id,
+    email: row.email,
+    passwordHash: row.password_hash,
+    role: row.role,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
+
+const USER_COLUMNS = "id, email, password_hash, role, created_at, updated_at";
 
 type Dependencies = {
   database: Database;
@@ -34,11 +44,18 @@ export const createPostgresUsersRepository = ({
     const result = await database.query<UserRow>(
       `
         INSERT INTO users (${USER_COLUMNS})
-        VALUES ($1, $2, $3, $4, $5)
+        VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (email) DO NOTHING
         RETURNING ${USER_COLUMNS}
       `,
-      [user.id, user.email, user.passwordHash, user.createdAt, user.updatedAt],
+      [
+        user.id,
+        user.email,
+        user.passwordHash,
+        user.role,
+        user.createdAt,
+        user.updatedAt,
+      ],
     );
 
     const row = result.rows[0];
@@ -68,10 +85,31 @@ export const createPostgresUsersRepository = ({
     return row ? mapUserRowToDomain(row) : null;
   };
 
+  const updateRole: UsersRepository["updateRole"] = async (
+    email,
+    role,
+    now,
+  ) => {
+    const result = await database.query<UserRow>(
+      `
+        UPDATE users
+        SET role = $2, updated_at = $3
+        WHERE email = $1
+        RETURNING ${USER_COLUMNS}
+      `,
+      [email, role, now],
+    );
+
+    const row = result.rows[0];
+
+    return row ? mapUserRowToDomain(row) : null;
+  };
+
   return {
     create,
     findByEmail,
     findById,
+    updateRole,
   };
 };
 

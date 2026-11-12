@@ -27,6 +27,7 @@ const createUser = async (): Promise<string> => {
     id: randomUUID(),
     email: `user-${randomUUID()}@example.com`,
     passwordHash: "not-a-real-hash",
+    role: "user",
     createdAt: now,
     updatedAt: now,
   });

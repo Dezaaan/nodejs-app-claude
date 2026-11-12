@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { Logger } from "../../infrastructure/createLogger.js";
 import { ConflictError } from "../../shared/errors/ConflictError.js";
+import { NotFoundError } from "../../shared/errors/NotFoundError.js";
 import { UnauthorizedError } from "../../shared/errors/UnauthorizedError.js";
+import { DEFAULT_ROLE, type Role } from "../../shared/auth/permissions.js";
 import type { AuthContext } from "../../shared/http/authContext.js";
 import type { PasswordHasher } from "./auth.passwords.js";
 import type {
@@ -31,6 +33,9 @@ export type AuthService = {
   authenticate(accessToken: string): Promise<AuthContext>;
 
   getCurrentUser(userId: string): Promise<User>;
+
+  // For operators only (see src/scripts/setUserRole.ts), never an API route.
+  setRole(email: string, role: Role): Promise<User>;
 };
 
 type CreateAuthServiceDependencies = {
@@ -72,7 +77,10 @@ export const createAuthService = ({
 
     return {
       user,
-      accessToken: await accessTokens.sign(user.id),
+      accessToken: await accessTokens.sign({
+        userId: user.id,
+        role: user.role,
+      }),
       refreshToken,
       refreshTokenExpiresAt,
     };
@@ -85,6 +93,7 @@ export const createAuthService = ({
       id: randomUUID(),
       email: input.email,
       passwordHash: await passwordHasher.hash(input.password),
+      role: DEFAULT_ROLE,
       createdAt: now,
       updatedAt: now,
     });
@@ -193,9 +202,26 @@ export const createAuthService = ({
     return user;
   };
 
+  const setRole = async (email: string, role: Role): Promise<User> => {
+    const user = await usersRepository.updateRole(
+      email.trim().toLowerCase(),
+      role,
+      new Date(),
+    );
+
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+
+    logger.info("User role changed", { userId: user.id, role });
+
+    return user;
+  };
+
   return {
     authenticate,
     getCurrentUser,
+    setRole,
     login,
     logout,
     refresh,

@@ -20,7 +20,8 @@
     "test:integration": "node --env-file=.env.test ./node_modules/vitest/vitest.mjs run tests/integration",
     "test:api": "node --env-file=.env.test ./node_modules/vitest/vitest.mjs run tests/api",
     "test:all": "node --env-file=.env.test ./node_modules/vitest/vitest.mjs run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "user:set-role": "tsx src/scripts/setUserRole.ts"
   },
   "dependencies": {
     "argon2": "^0.45.2",

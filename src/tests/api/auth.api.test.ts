@@ -1,3 +1,4 @@
+import { SignJWT } from "jose";
 import request from "supertest";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../app.js";
@@ -5,6 +6,7 @@ import {
   getRefreshCookie,
   getSetCookieHeader,
   registerTestUser,
+  setTestUserRole,
 } from "../helpers/authHelpers.js";
 import { createTestContainer } from "../helpers/createTestContainer.js";
 import { resetDatabase } from "../helpers/resetDatabase.js";
@@ -34,8 +36,10 @@ describe("Auth API", () => {
         user: {
           id: expect.any(String),
           email: "ana@example.com",
+          role: "user",
           createdAt: expect.any(String),
         },
+        permissions: ["notes.view", "notes.edit"],
         accessToken: expect.any(String),
         accessTokenExpiresIn: 900,
       });
@@ -121,7 +125,26 @@ describe("Auth API", () => {
       expect(response.body.user).toMatchObject({
         id: user.id,
         email: user.email,
+        role: "user",
       });
+      expect(response.body.permissions).toEqual(["notes.view", "notes.edit"]);
+    });
+
+    it("returns read-only permissions for a viewer", async () => {
+      const viewer = await setTestUserRole(
+        app,
+        container.features.auth.service,
+        await registerTestUser(app),
+        "viewer",
+      );
+
+      const response = await request(app)
+        .get("/api/v1/auth/me")
+        .auth(viewer.accessToken, { type: "bearer" });
+
+      expect(response.status).toBe(200);
+      expect(response.body.user.role).toBe("viewer");
+      expect(response.body.permissions).toEqual(["notes.view"]);
     });
 
     it("rejects a missing access token", async () => {
@@ -138,6 +161,26 @@ describe("Auth API", () => {
       const response = await request(app)
         .get("/api/v1/auth/me")
         .auth(`${header}.${payload}.invalid-signature`, { type: "bearer" });
+
+      expect(response.status).toBe(401);
+    });
+
+    it("rejects an access token without a role", async () => {
+      const user = await registerTestUser(app);
+
+      // Signed with the right key, but shaped like a token from before roles.
+      const token = await new SignJWT({})
+        .setProtectedHeader({ alg: "HS256" })
+        .setSubject(user.id)
+        .setIssuer("nodejs-app-claude")
+        .setAudience("nodejs-app-claude-api")
+        .setIssuedAt()
+        .setExpirationTime("5m")
+        .sign(new TextEncoder().encode(container.config.auth.jwtSecret));
+
+      const response = await request(app)
+        .get("/api/v1/auth/me")
+        .auth(token, { type: "bearer" });
 
       expect(response.status).toBe(401);
     });
@@ -181,6 +224,27 @@ describe("Auth API", () => {
         .set("cookie", getRefreshCookie(rotated));
 
       expect(afterReuse.status).toBe(401);
+    });
+
+    it("picks up a role change", async () => {
+      const user = await registerTestUser(app);
+
+      await container.features.auth.service.setRole(user.email, "viewer");
+
+      const response = await request(app)
+        .post("/api/v1/auth/refresh")
+        .set("cookie", user.refreshCookie);
+
+      expect(response.status).toBe(200);
+      expect(response.body.user.role).toBe("viewer");
+      expect(response.body.permissions).toEqual(["notes.view"]);
+
+      const createNote = await request(app)
+        .post("/api/v1/notes")
+        .auth(response.body.accessToken, { type: "bearer" })
+        .send({ title: "Title", content: "Content" });
+
+      expect(createNote.status).toBe(403);
     });
 
     it("rejects a request without a refresh token", async () => {

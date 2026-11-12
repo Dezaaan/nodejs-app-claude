@@ -1,7 +1,10 @@
+import type { Role } from "../../shared/auth/permissions.js";
+
 export type User = {
   id: string;
   email: string;
   passwordHash: string;
+  role: Role;
   createdAt: Date;
   updatedAt: Date;
 };

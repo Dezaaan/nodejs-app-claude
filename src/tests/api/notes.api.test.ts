@@ -3,7 +3,11 @@ import { randomUUID } from "node:crypto";
 import request from "supertest";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../app.js";
-import { registerTestUser, type TestUser } from "../helpers/authHelpers.js";
+import {
+  registerTestUser,
+  setTestUserRole,
+  type TestUser,
+} from "../helpers/authHelpers.js";
 import { createTestContainer } from "../helpers/createTestContainer.js";
 import { resetDatabase } from "../helpers/resetDatabase.js";
 
@@ -223,6 +227,57 @@ describe("Notes API", () => {
       const original = await get(`/api/v1/notes/${noteId}`);
 
       expect(original.body.title).toBe("Private note");
+    });
+  });
+
+  describe("read-only users", () => {
+    let viewer: TestUser;
+    let noteId: string;
+
+    beforeEach(async () => {
+      const created = await post("/api/v1/notes").send({
+        title: "Written before",
+        content: "Now read-only",
+      });
+
+      noteId = created.body.id;
+
+      viewer = await setTestUserRole(
+        app,
+        container.features.auth.service,
+        user,
+        "viewer",
+      );
+    });
+
+    it("can list and read their notes", async () => {
+      const list = await get("/api/v1/notes", viewer);
+      const one = await get(`/api/v1/notes/${noteId}`, viewer);
+
+      expect(list.status).toBe(200);
+      expect(list.body.items).toHaveLength(1);
+      expect(one.status).toBe(200);
+    });
+
+    it("cannot create, update or delete notes", async () => {
+      const creation = await post("/api/v1/notes", viewer).send({
+        title: "New",
+        content: "Content",
+      });
+      const update = await patch(`/api/v1/notes/${noteId}`, viewer).send({
+        title: "Changed",
+      });
+      const deletion = await del(`/api/v1/notes/${noteId}`, viewer);
+
+      for (const response of [creation, update, deletion]) {
+        expect(response.status).toBe(403);
+        expect(response.body.error.code).toBe("FORBIDDEN");
+      }
+
+      const list = await get("/api/v1/notes", viewer);
+
+      expect(list.body.items).toHaveLength(1);
+      expect(list.body.items[0].title).toBe("Written before");
     });
   });
 });
