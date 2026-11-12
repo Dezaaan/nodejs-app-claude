@@ -2,7 +2,7 @@
 
 A notes REST API built with Node.js, TypeScript, Express 5 and PostgreSQL.
 
-The API is served under `/api/v1`. It does not have authentication yet, so don't expose it publicly.
+The API is served under `/api/v1`. Users sign up and log in, and each user can only see and change their own notes.
 
 ## Requirements
 
@@ -13,7 +13,7 @@ The API is served under `/api/v1`. It does not have authentication yet, so don't
 
 ```bash
 npm install
-cp .env.example .env
+cp .env.example .env   # then set JWT_SECRET to a random value
 docker compose up -d postgres
 npm run db:migrate
 npm run dev
@@ -23,17 +23,24 @@ The app listens on the `PORT` set in `.env`.
 
 ## API
 
-| Method   | Path                | Description                   |
-| -------- | ------------------- | ----------------------------- |
-| `GET`    | `/health`           | The process is running        |
-| `GET`    | `/ready`            | The database is reachable     |
-| `GET`    | `/api/v1/notes`     | List, search and paginate     |
-| `GET`    | `/api/v1/notes/:id` | Get one note                  |
-| `POST`   | `/api/v1/notes`     | Create a note                 |
-| `PATCH`  | `/api/v1/notes/:id` | Update a title and/or content |
-| `DELETE` | `/api/v1/notes/:id` | Delete a note                 |
+| Method   | Path                    | Description                           |
+| -------- | ----------------------- | ------------------------------------- |
+| `GET`    | `/health`               | The process is running                |
+| `GET`    | `/ready`                | The database is reachable             |
+| `POST`   | `/api/v1/auth/register` | Create an account and start a session |
+| `POST`   | `/api/v1/auth/login`    | Start a session                       |
+| `POST`   | `/api/v1/auth/refresh`  | Get a new access token                |
+| `POST`   | `/api/v1/auth/logout`   | End the current session               |
+| `GET`    | `/api/v1/auth/me`       | Get the logged-in user                |
+| `GET`    | `/api/v1/notes`         | List, search and paginate             |
+| `GET`    | `/api/v1/notes/:id`     | Get one note                          |
+| `POST`   | `/api/v1/notes`         | Create a note                         |
+| `PATCH`  | `/api/v1/notes/:id`     | Update a title and/or content         |
+| `DELETE` | `/api/v1/notes/:id`     | Delete a note                         |
 
 `GET /api/v1/notes` accepts `page`, `pageSize` (up to 100), `search`, `title`, `sortBy` (`createdAt`, `updatedAt` or `title`) and `sortOrder` (`asc` or `desc`).
+
+All notes routes require an access token. Another user's note returns 404, as if it didn't exist.
 
 Errors are returned as JSON:
 
@@ -41,16 +48,43 @@ Errors are returned as JSON:
 { "error": { "code": "NOT_FOUND", "message": "Note not found" } }
 ```
 
+## Authentication
+
+Sessions use two tokens:
+
+| Token         | Lifetime   | Where it lives                                                                   |
+| ------------- | ---------- | -------------------------------------------------------------------------------- |
+| Access token  | 15 minutes | Response body. Keep it in memory and send it as `Authorization: Bearer <token>`. |
+| Refresh token | 30 days    | `httpOnly`, `Secure`, `SameSite=Strict` cookie, sent only to `/api/v1/auth`.     |
+
+Register, login and refresh return `{ user, accessToken, accessTokenExpiresIn }` and set the refresh token cookie.
+
+Each refresh replaces the refresh token with a new one. If an old refresh token is used again, the token was probably copied, so the whole session is ended. Logout ends only the current session.
+
+### Using it from a frontend
+
+- Call `POST /api/v1/auth/refresh` on page load to get an access token, since memory is cleared on reload. A 401 means the user is logged out.
+- Send auth requests with `credentials: "include"` so the browser sends and stores the cookie.
+- When an access token expires (401), call refresh once and retry the request.
+- Open the frontend and API with the same hostname. `localhost` and `127.0.0.1` are different sites, and the cookie won't be sent between them.
+- In production, serve the frontend and API from the same parent domain, for example `app.example.com` and `api.example.com`. On unrelated domains, browsers treat the cookie as third-party and may block it.
+
+Auth routes reject requests whose `Origin` header doesn't match `CLIENT_ORIGIN`, and are limited to 20 requests per minute per IP.
+
 ## Configuration
 
-| Variable           | Required | Default       | Description                                   |
-| ------------------ | -------- | ------------- | --------------------------------------------- |
-| `DATABASE_URL`     | Yes      |               | PostgreSQL connection string                  |
-| `CLIENT_ORIGIN`    | Yes      |               | Origin allowed by CORS                        |
-| `NODE_ENV`         | No       | `development` | `development`, `test` or `production`         |
-| `PORT`             | No       | `4000`        | HTTP port                                     |
-| `TRUST_PROXY_HOPS` | No       | `0`           | Number of reverse proxies in front of the app |
-| `LOG_LEVEL`        | No       | `info`        | `debug`, `info`, `warn`, `error` or `silent`  |
+| Variable                   | Required | Default       | Description                                                             |
+| -------------------------- | -------- | ------------- | ----------------------------------------------------------------------- |
+| `DATABASE_URL`             | Yes      |               | PostgreSQL connection string                                            |
+| `CLIENT_ORIGIN`            | Yes      |               | Frontend origin, allowed by CORS and the auth routes                    |
+| `JWT_SECRET`               | Yes      |               | Access token signing key, at least 32 characters                        |
+| `ACCESS_TOKEN_TTL_SECONDS` | No       | `900`         | Access token lifetime                                                   |
+| `REFRESH_TOKEN_TTL_DAYS`   | No       | `30`          | Refresh token lifetime                                                  |
+| `COOKIE_SECURE`            | No       | `true`        | Set to `false` only for local HTTP development in browsers that need it |
+| `NODE_ENV`                 | No       | `development` | `development`, `test` or `production`                                   |
+| `PORT`                     | No       | `4000`        | HTTP port                                                               |
+| `TRUST_PROXY_HOPS`         | No       | `0`           | Number of reverse proxies in front of the app                           |
+| `LOG_LEVEL`                | No       | `info`        | `debug`, `info`, `warn`, `error` or `silent`                            |
 
 Behind a reverse proxy, set `TRUST_PROXY_HOPS`. Otherwise all clients share one rate limit.
 
@@ -66,6 +100,7 @@ PORT=3001
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/nodejs_app_claude_test
 CLIENT_ORIGIN=http://localhost:5173
 LOG_LEVEL=silent
+JWT_SECRET=any-test-secret-that-is-at-least-32-characters
 ```
 
 Then run:
@@ -92,6 +127,7 @@ npm run test:all
 src/
   app/             Dependency wiring
   config/          Environment validation and app config
+  features/auth/   Users, sessions, tokens and the requireAuth middleware
   features/notes/  Routes, controller, service and repository
   infrastructure/  Logger, database and request context
   routes/          API router
@@ -113,5 +149,5 @@ docker run --rm -e DATABASE_URL=... nodejs-app-claude \
   node_modules/.bin/node-pg-migrate up -m database/migrations
 
 # Start the app
-docker run -p 3000:3000 -e PORT=3000 -e DATABASE_URL=... -e CLIENT_ORIGIN=... nodejs-app-claude
+docker run -p 3000:3000 -e PORT=3000 -e DATABASE_URL=... -e CLIENT_ORIGIN=... -e JWT_SECRET=... nodejs-app-claude
 ```

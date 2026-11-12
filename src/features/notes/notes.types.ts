@@ -1,5 +1,6 @@
 export type Note = {
   id: string;
+  userId: string;
   title: string;
   content: string;
   createdAt: Date;
@@ -7,7 +8,7 @@ export type Note = {
 };
 
 // An undefined title or content leaves the stored value unchanged.
-export type UpdateNoteData = Pick<Note, "id" | "updatedAt"> & {
+export type UpdateNoteData = Pick<Note, "id" | "userId" | "updatedAt"> & {
   title: string | undefined;
   content: string | undefined;
 };

@@ -1,16 +1,21 @@
 import type { Note, NotesQueryOptions, UpdateNoteData } from "./notes.types.js";
 
+// Every method is scoped to one user: notes owned by anyone else behave as if
+// they don't exist.
 export type NotesRepository = {
   create(note: Note): Promise<Note>;
 
-  deleteById(id: string): Promise<boolean>;
+  deleteById(userId: string, id: string): Promise<boolean>;
 
-  findMany(options: NotesQueryOptions): Promise<{
+  findMany(
+    userId: string,
+    options: NotesQueryOptions,
+  ): Promise<{
     items: Note[];
     totalItems: number;
   }>;
 
-  findById(id: string): Promise<Note | null>;
+  findById(userId: string, id: string): Promise<Note | null>;
 
   update(note: UpdateNoteData): Promise<Note | null>;
 };

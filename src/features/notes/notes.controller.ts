@@ -1,5 +1,6 @@
 import type { RequestHandler } from "express";
 
+import { getAuth } from "../../shared/http/authContext.js";
 import { mapPaginatedResult } from "../../shared/mapping/mapPaginatedResult.js";
 import { validatedHandler } from "../../shared/http/validatedHandler.js";
 import {
@@ -26,13 +27,17 @@ type CreateNotesControllerDependencies = {
   notesService: NotesService;
 };
 
+// Routes using this controller must be mounted behind requireAuth.
 export const createNotesController = ({
   notesService,
 }: CreateNotesControllerDependencies): NotesController => {
   const getNotes = validatedHandler(
     { query: notesQuerySchema },
     async ({ query }, response) => {
-      const result = await notesService.getNotes(mapNotesQueryToOptions(query));
+      const result = await notesService.getNotes(
+        getAuth(response).userId,
+        mapNotesQueryToOptions(query),
+      );
 
       response
         .status(200)
@@ -43,7 +48,10 @@ export const createNotesController = ({
   const getNoteById = validatedHandler(
     { params: noteIdParamsSchema },
     async ({ params }, response) => {
-      const note = await notesService.getNoteById(params.id);
+      const note = await notesService.getNoteById(
+        getAuth(response).userId,
+        params.id,
+      );
 
       response.status(200).json(mapNoteToResponseDto(note));
     },
@@ -52,7 +60,10 @@ export const createNotesController = ({
   const createNote = validatedHandler(
     { body: createNoteSchema },
     async ({ body }, response) => {
-      const note = await notesService.createNote(body);
+      const note = await notesService.createNote(
+        getAuth(response).userId,
+        body,
+      );
 
       response.status(201).json(mapNoteToResponseDto(note));
     },
@@ -61,7 +72,11 @@ export const createNotesController = ({
   const updateNote = validatedHandler(
     { params: noteIdParamsSchema, body: updateNoteSchema },
     async ({ params, body }, response) => {
-      const note = await notesService.updateNote(params.id, body);
+      const note = await notesService.updateNote(
+        getAuth(response).userId,
+        params.id,
+        body,
+      );
 
       response.status(200).json(mapNoteToResponseDto(note));
     },
@@ -70,7 +85,7 @@ export const createNotesController = ({
   const deleteNote = validatedHandler(
     { params: noteIdParamsSchema },
     async ({ params }, response) => {
-      await notesService.deleteNote(params.id);
+      await notesService.deleteNote(getAuth(response).userId, params.id);
 
       response.status(204).send();
     },

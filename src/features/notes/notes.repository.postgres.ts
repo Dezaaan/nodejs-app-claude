@@ -3,17 +3,21 @@ import type { NotesRepository } from "./notes.repository.js";
 import type { Note, NotesQueryOptions, UpdateNoteData } from "./notes.types.js";
 
 type NoteRow = Pick<Note, "id" | "title" | "content"> & {
+  user_id: string;
   created_at: Date;
   updated_at: Date;
 };
 
 const mapNoteRowToDomain = (row: NoteRow): Note => ({
   id: row.id,
+  userId: row.user_id,
   title: row.title,
   content: row.content,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
+
+const NOTE_COLUMNS = "id, user_id, title, content, created_at, updated_at";
 
 type CreatePostgresNotesRepositoryDependencies = {
   database: Database;
@@ -32,11 +36,11 @@ const toContainsPattern = (value: string): string =>
 export const createPostgresNotesRepository = ({
   database,
 }: CreatePostgresNotesRepositoryDependencies): NotesRepository => {
-  const findMany = async (options: NotesQueryOptions) => {
+  const findMany = async (userId: string, options: NotesQueryOptions) => {
     const offset = (options.page - 1) * options.pageSize;
 
-    const conditions: string[] = [];
-    const params: unknown[] = [];
+    const params: unknown[] = [userId];
+    const conditions: string[] = ["user_id = $1"];
 
     if (options.search) {
       params.push(toContainsPattern(options.search));
@@ -57,8 +61,7 @@ export const createPostgresNotesRepository = ({
       conditions.push(`title ILIKE $${params.length}`);
     }
 
-    const whereClause =
-      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const whereClause = `WHERE ${conditions.join(" AND ")}`;
 
     const sortColumn = sortColumnMap[options.sortBy];
 
@@ -72,12 +75,7 @@ export const createPostgresNotesRepository = ({
 
     const notesResult = await database.query<NoteRow>(
       `
-          SELECT
-            id,
-            title,
-            content,
-            created_at,
-            updated_at
+          SELECT ${NOTE_COLUMNS}
           FROM notes
           ${whereClause}
           ORDER BY ${sortColumn} ${sortOrder}, id ${sortOrder}
@@ -107,19 +105,14 @@ export const createPostgresNotesRepository = ({
     };
   };
 
-  const findById = async (id: string): Promise<Note | null> => {
+  const findById = async (userId: string, id: string): Promise<Note | null> => {
     const result = await database.query<NoteRow>(
       `
-        SELECT
-          id,
-          title,
-          content,
-          created_at,
-          updated_at
+        SELECT ${NOTE_COLUMNS}
         FROM notes
-        WHERE id = $1
+        WHERE id = $1 AND user_id = $2
       `,
-      [id],
+      [id, userId],
     );
 
     const row = result.rows[0];
@@ -130,22 +123,18 @@ export const createPostgresNotesRepository = ({
   const create = async (note: Note): Promise<Note> => {
     const result = await database.query<NoteRow>(
       `
-        INSERT INTO notes (
-          id,
-          title,
-          content,
-          created_at,
-          updated_at
-        )
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING
-          id,
-          title,
-          content,
-          created_at,
-          updated_at
+        INSERT INTO notes (${NOTE_COLUMNS})
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING ${NOTE_COLUMNS}
       `,
-      [note.id, note.title, note.content, note.createdAt, note.updatedAt],
+      [
+        note.id,
+        note.userId,
+        note.title,
+        note.content,
+        note.createdAt,
+        note.updatedAt,
+      ],
     );
 
     return mapNoteRowToDomain(result.rows[0]!);
@@ -156,18 +145,19 @@ export const createPostgresNotesRepository = ({
       `
       UPDATE notes
       SET
-        title = COALESCE($2, title),
-        content = COALESCE($3, content),
-        updated_at = $4
-      WHERE id = $1
-      RETURNING
-        id,
-        title,
-        content,
-        created_at,
-        updated_at
+        title = COALESCE($3, title),
+        content = COALESCE($4, content),
+        updated_at = $5
+      WHERE id = $1 AND user_id = $2
+      RETURNING ${NOTE_COLUMNS}
     `,
-      [note.id, note.title ?? null, note.content ?? null, note.updatedAt],
+      [
+        note.id,
+        note.userId,
+        note.title ?? null,
+        note.content ?? null,
+        note.updatedAt,
+      ],
     );
 
     const row = result.rows[0];
@@ -175,13 +165,13 @@ export const createPostgresNotesRepository = ({
     return row ? mapNoteRowToDomain(row) : null;
   };
 
-  const deleteById = async (id: string): Promise<boolean> => {
+  const deleteById = async (userId: string, id: string): Promise<boolean> => {
     const result = await database.query(
       `
       DELETE FROM notes
-      WHERE id = $1
+      WHERE id = $1 AND user_id = $2
     `,
-      [id],
+      [id, userId],
     );
 
     return (result.rowCount ?? 0) > 0;

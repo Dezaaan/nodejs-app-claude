@@ -6,16 +6,21 @@ import type { NotesRepository } from "./notes.repository.js";
 import type { PaginatedResult } from "../../shared/pagination/pagination.types.js";
 import { createPaginatedResult } from "../../shared/pagination/createPaginatedResult.js";
 
+// Every method acts on behalf of one user. Another user's note is reported as
+// not found, so its existence isn't revealed.
 export type NotesService = {
-  createNote(input: CreateNoteInput): Promise<Note>;
+  createNote(userId: string, input: CreateNoteInput): Promise<Note>;
 
-  getNotes(options: NotesQueryOptions): Promise<PaginatedResult<Note>>;
+  getNotes(
+    userId: string,
+    options: NotesQueryOptions,
+  ): Promise<PaginatedResult<Note>>;
 
-  getNoteById(id: string): Promise<Note>;
+  getNoteById(userId: string, id: string): Promise<Note>;
 
-  updateNote(id: string, input: UpdateNoteInput): Promise<Note>;
+  updateNote(userId: string, id: string, input: UpdateNoteInput): Promise<Note>;
 
-  deleteNote(id: string): Promise<void>;
+  deleteNote(userId: string, id: string): Promise<void>;
 };
 
 type CreateNotesServiceDependencies = {
@@ -28,9 +33,13 @@ export const createNotesService = ({
   logger,
 }: CreateNotesServiceDependencies): NotesService => {
   const getNotes = async (
+    userId: string,
     options: NotesQueryOptions,
   ): Promise<PaginatedResult<Note>> => {
-    const { items, totalItems } = await notesRepository.findMany(options);
+    const { items, totalItems } = await notesRepository.findMany(
+      userId,
+      options,
+    );
 
     return createPaginatedResult({
       items,
@@ -41,8 +50,9 @@ export const createNotesService = ({
       },
     });
   };
-  const getNoteById = async (id: string): Promise<Note> => {
-    const note = await notesRepository.findById(id);
+
+  const getNoteById = async (userId: string, id: string): Promise<Note> => {
+    const note = await notesRepository.findById(userId, id);
 
     if (!note) {
       throw new NotFoundError("Note not found");
@@ -51,11 +61,15 @@ export const createNotesService = ({
     return note;
   };
 
-  const createNote = async (input: CreateNoteInput): Promise<Note> => {
+  const createNote = async (
+    userId: string,
+    input: CreateNoteInput,
+  ): Promise<Note> => {
     const now = new Date();
 
     const note: Note = {
       id: crypto.randomUUID(),
+      userId,
       title: input.title,
       content: input.content,
       createdAt: now,
@@ -72,11 +86,13 @@ export const createNotesService = ({
   };
 
   const updateNote = async (
+    userId: string,
     id: string,
     input: UpdateNoteInput,
   ): Promise<Note> => {
     const updatedNote = await notesRepository.update({
       id,
+      userId,
       title: input.title,
       content: input.content,
       updatedAt: new Date(),
@@ -93,8 +109,8 @@ export const createNotesService = ({
     return updatedNote;
   };
 
-  const deleteNote = async (id: string): Promise<void> => {
-    const deleted = await notesRepository.deleteById(id);
+  const deleteNote = async (userId: string, id: string): Promise<void> => {
+    const deleted = await notesRepository.deleteById(userId, id);
 
     if (!deleted) {
       throw new NotFoundError("Note not found");
