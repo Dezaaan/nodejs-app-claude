@@ -12,7 +12,10 @@ export const startServer = ({ app, container }: StartServerDependencies) => {
   const {
     config,
     infrastructure: { database, logger },
+    features,
   } = container;
+
+  const tokenCleanup = features.auth.startTokenCleanup();
 
   // Express 5 also calls this callback when listening fails.
   const server = app.listen(config.app.port, (error) => {
@@ -35,6 +38,9 @@ export const startServer = ({ app, container }: StartServerDependencies) => {
 
   const closeDatabaseAndExit = async (): Promise<void> => {
     try {
+      // Let a cleanup in progress finish before its connection goes away.
+      await tokenCleanup.stop();
+
       await database.close();
 
       logger.info("Database connection closed");

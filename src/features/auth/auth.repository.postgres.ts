@@ -201,9 +201,21 @@ export const createPostgresRefreshTokensRepository = ({
     );
   };
 
+  const deleteExpired: RefreshTokensRepository["deleteExpired"] = async (
+    now,
+  ) => {
+    const result = await database.query(
+      "DELETE FROM refresh_tokens WHERE expires_at < $1",
+      [now],
+    );
+
+    return result.rowCount ?? 0;
+  };
+
   return {
     consume,
     create,
+    deleteExpired,
     findByHash,
     revokeFamily,
   };

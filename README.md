@@ -63,6 +63,8 @@ Register, login and refresh return `{ user, permissions, accessToken, accessToke
 
 Each refresh replaces the refresh token with a new one. If an old refresh token is used again, the token was probably copied, so the whole session is ended. Logout ends only the current session.
 
+The app deletes expired refresh tokens when it starts and then every hour. Used and logged-out tokens are kept until they expire, because they're needed to detect a copied token.
+
 ### Using it from a frontend
 
 - Call `POST /api/v1/auth/refresh` on page load to get an access token, since memory is cleared on reload. A 401 means the user is logged out.

@@ -29,4 +29,8 @@ export type RefreshTokensRepository = {
   findByHash(tokenHash: string): Promise<StoredRefreshToken | null>;
 
   revokeFamily(familyId: string, now: Date): Promise<void>;
+
+  // Deletes tokens that expired before `now` and returns how many. Revoked
+  // tokens that haven't expired are kept: they are how reuse is detected.
+  deleteExpired(now: Date): Promise<number>;
 };
