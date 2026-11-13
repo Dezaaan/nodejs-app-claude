@@ -6,6 +6,10 @@ import {
   createAuthController,
   type AuthController,
 } from "./auth.controller.js";
+import {
+  startRefreshTokenCleanup,
+  type RefreshTokenCleanup,
+} from "./auth.cleanup.js";
 import { createRequireAuth } from "./auth.middleware.js";
 import { createPasswordHasher } from "./auth.passwords.js";
 import {
@@ -19,7 +23,11 @@ export type AuthFeature = {
   service: AuthService;
   controller: AuthController;
   requireAuth: RequestHandler;
+  // Started by the server only, so tests and scripts don't run it.
+  startTokenCleanup(): RefreshTokenCleanup;
 };
+
+const TOKEN_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 type CreateAuthFeatureDependencies = {
   database: Database;
@@ -32,11 +40,13 @@ export const createAuthFeature = ({
   logger,
   config,
 }: CreateAuthFeatureDependencies): AuthFeature => {
+  const refreshTokensRepository = createPostgresRefreshTokensRepository({
+    database,
+  });
+
   const service = createAuthService({
     usersRepository: createPostgresUsersRepository({ database }),
-    refreshTokensRepository: createPostgresRefreshTokensRepository({
-      database,
-    }),
+    refreshTokensRepository,
     passwordHasher: createPasswordHasher(),
     accessTokens: createAccessTokens({
       secret: config.jwtSecret,
@@ -56,5 +66,11 @@ export const createAuthFeature = ({
     service,
     controller,
     requireAuth: createRequireAuth(service),
+    startTokenCleanup: () =>
+      startRefreshTokenCleanup({
+        refreshTokensRepository,
+        logger,
+        intervalMs: TOKEN_CLEANUP_INTERVAL_MS,
+      }),
   };
 };
