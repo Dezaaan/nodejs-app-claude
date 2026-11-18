@@ -10,7 +10,7 @@ export const createDatabase = (
 ): Database => {
   const pool = new Pool({
     connectionString: config.url,
-    max: 10,
+    max: config.poolMax,
     connectionTimeoutMillis: 5_000,
   });
 

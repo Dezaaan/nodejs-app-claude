@@ -8,6 +8,7 @@ export type AppConfig = {
   };
   database: {
     url: string;
+    poolMax: number;
   };
   cors: {
     origin: string;
@@ -35,6 +36,7 @@ export const createConfig = (env: Env): AppConfig => ({
   },
   database: {
     url: env.DATABASE_URL,
+    poolMax: env.DATABASE_POOL_MAX,
   },
   cors: {
     // Normalized (no trailing slash) so it matches the browser's Origin header.
@@ -50,8 +52,7 @@ export const createConfig = (env: Env): AppConfig => ({
     cookieSecure: env.COOKIE_SECURE,
   },
   rateLimit: {
-    apiPerMinute: 100,
-    // Stricter on auth routes to slow down password guessing.
-    authPerMinute: 20,
+    apiPerMinute: env.RATE_LIMIT_API_PER_MINUTE,
+    authPerMinute: env.RATE_LIMIT_AUTH_PER_MINUTE,
   },
 });

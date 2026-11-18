@@ -96,18 +96,21 @@ The frontend should use `permissions` only to show or hide actions. Check permis
 
 ## Configuration
 
-| Variable                   | Required | Default       | Description                                                             |
-| -------------------------- | -------- | ------------- | ----------------------------------------------------------------------- |
-| `DATABASE_URL`             | Yes      |               | PostgreSQL connection string                                            |
-| `CLIENT_ORIGIN`            | Yes      |               | Frontend origin, allowed by CORS and the auth routes                    |
-| `JWT_SECRET`               | Yes      |               | Access token signing key, at least 32 characters                        |
-| `ACCESS_TOKEN_TTL_SECONDS` | No       | `900`         | Access token lifetime                                                   |
-| `REFRESH_TOKEN_TTL_DAYS`   | No       | `30`          | Refresh token lifetime                                                  |
-| `COOKIE_SECURE`            | No       | `true`        | Set to `false` only for local HTTP development in browsers that need it |
-| `NODE_ENV`                 | No       | `development` | `development`, `test` or `production`                                   |
-| `PORT`                     | No       | `4000`        | HTTP port                                                               |
-| `TRUST_PROXY_HOPS`         | No       | `0`           | Number of reverse proxies in front of the app                           |
-| `LOG_LEVEL`                | No       | `info`        | `debug`, `info`, `warn`, `error` or `silent`                            |
+| Variable                     | Required | Default       | Description                                                             |
+| ---------------------------- | -------- | ------------- | ----------------------------------------------------------------------- |
+| `DATABASE_URL`               | Yes      |               | PostgreSQL connection string                                            |
+| `CLIENT_ORIGIN`              | Yes      |               | Frontend origin, allowed by CORS and the auth routes                    |
+| `JWT_SECRET`                 | Yes      |               | Access token signing key, at least 32 characters                        |
+| `ACCESS_TOKEN_TTL_SECONDS`   | No       | `900`         | Access token lifetime                                                   |
+| `REFRESH_TOKEN_TTL_DAYS`     | No       | `30`          | Refresh token lifetime                                                  |
+| `COOKIE_SECURE`              | No       | `true`        | Set to `false` only for local HTTP development in browsers that need it |
+| `NODE_ENV`                   | No       | `development` | `development`, `test` or `production`                                   |
+| `PORT`                       | No       | `4000`        | HTTP port                                                               |
+| `TRUST_PROXY_HOPS`           | No       | `0`           | Number of reverse proxies in front of the app                           |
+| `LOG_LEVEL`                  | No       | `info`        | `debug`, `info`, `warn`, `error` or `silent`                            |
+| `DATABASE_POOL_MAX`          | No       | `10`          | Database connections per app process                                    |
+| `RATE_LIMIT_API_PER_MINUTE`  | No       | `100`         | Requests per minute per IP on `/api/v1`                                 |
+| `RATE_LIMIT_AUTH_PER_MINUTE` | No       | `20`          | Requests per minute per IP on `/api/v1/auth`                            |
 
 Behind a reverse proxy, set `TRUST_PROXY_HOPS`. Otherwise all clients share one rate limit.
 
@@ -132,6 +135,42 @@ Then run:
 npm run db:migrate:test
 npm run test:all
 ```
+
+## Load testing
+
+Measures how the API holds up with 5 million users. It uses its own database, `nodejs_app_claude_load`, so the dev and test databases stay small.
+
+```bash
+npm run load:setup                    # create the database and .env.load
+npm run load:seed                     # 5M users and 10M notes, about 10-12 GB
+npm run load:start                    # build and start the API on port 3100
+npm run load:run -- --scenario mixed  # in another terminal
+```
+
+`load:seed` takes `--users` and `--notes`; try `--users 10000 --notes 20000` first. It deletes existing load data, and the same counts always produce the same data. Every user's password is `load-test-password` and emails are `user0@load.test`, `user1@load.test` and so on. Users with low numbers have the most notes: `user0` has about 58,000. Every tenth user is a viewer.
+
+Rows are streamed into PostgreSQL's `COPY` and the indexes are rebuilt afterwards, so memory stays flat for any size.
+
+`load:run` sends requests at a fixed rate and reports the rate it reached, latency percentiles and failures. Results are saved to `load-testing/results/`.
+
+| Option          | Default   | Description                                            |
+| --------------- | --------- | ------------------------------------------------------ |
+| `--scenario`    | `mixed`   | `list`, `search`, `write`, `heavy`, `mixed` or `login` |
+| `--rate`        | `2000`    | Requests per second                                    |
+| `--duration`    | `30`      | Seconds, after a 5-second warmup                       |
+| `--connections` | `200`     | Requests in flight at once                             |
+| `--users`       | `5000000` | Must match the `--users` used for `load:seed`          |
+
+| Scenario | What it sends                                                     |
+| -------- | ----------------------------------------------------------------- |
+| `list`   | First page of notes for random users                              |
+| `search` | Searches for random users                                         |
+| `write`  | Creates notes                                                     |
+| `heavy`  | Users with the most notes, on pages 1 to 500                      |
+| `mixed`  | 80% list, 10% search, 10% create                                  |
+| `login`  | Logins. argon2 is slow on purpose, so use a rate like `--rate 20` |
+
+The test signs access tokens for 5,000 random users itself instead of logging them in. The load generator runs on the same machine as the API and database, so treat the numbers as a way to compare changes, not as production capacity.
 
 ## Scripts
 
