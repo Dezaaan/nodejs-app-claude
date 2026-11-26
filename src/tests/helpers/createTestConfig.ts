@@ -20,6 +20,16 @@ export const createTestConfig = (): AppConfig => {
     );
   }
 
+  // Tests flush their Redis database. Database 0 is the default one that
+  // development uses, so tests need an explicit, different number.
+  const redisDatabase = new URL(config.redis.url).pathname.slice(1);
+
+  if (redisDatabase === "" || redisDatabase === "0") {
+    throw new Error(
+      `Refusing to run tests against Redis database "${redisDatabase || "0"}": REDIS_URL must end with another database number, such as /1`,
+    );
+  }
+
   return {
     ...config,
     // Tests send many requests from one IP within a minute.

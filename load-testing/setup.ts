@@ -28,6 +28,7 @@ if (!existsSync(LOAD_ENV_FILE)) {
       "NODE_ENV=production",
       `PORT=${LOAD_PORT}`,
       `DATABASE_URL=${databaseUrl.href}`,
+      "REDIS_URL=redis://localhost:6379/2",
       `CLIENT_ORIGIN=${env.CLIENT_ORIGIN}`,
       `JWT_SECRET=${env.JWT_SECRET}`,
       // Request logs at thousands per second would measure the terminal.
