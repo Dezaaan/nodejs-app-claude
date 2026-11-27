@@ -2,6 +2,30 @@ services:
   postgres:
     image: postgres:17
     container_name: nodejs-postgres
+    # Tuned for a 12-core, 16 GB development machine running the 10M-user
+    # load-test database. The defaults (128 MB shared_buffers) are sized for
+    # tiny databases.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=2GB
+      - -c
+      - effective_cache_size=6GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=512MB
+      - -c
+      - max_connections=200
+      - -c
+      - max_wal_size=8GB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - max_parallel_maintenance_workers=4
+    # Parallel queries and index builds use shared memory; Docker's default
+    # of 64 MB is too small for them.
+    shm_size: 1gb
     environment:
       POSTGRES_DB: nodejs_app_claude
       POSTGRES_USER: postgres

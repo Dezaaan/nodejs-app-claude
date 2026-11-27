@@ -14,7 +14,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
 
   {
-    files: ["src/**/*.ts"],
+    files: ["src/**/*.ts", "load-testing/**/*.ts"],
     extends: [tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: {

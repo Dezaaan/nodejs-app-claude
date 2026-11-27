@@ -21,7 +21,11 @@
     "test:api": "node --env-file=.env.test ./node_modules/vitest/vitest.mjs run tests/api",
     "test:all": "node --env-file=.env.test ./node_modules/vitest/vitest.mjs run",
     "typecheck": "tsc --noEmit",
-    "user:set-role": "tsx src/scripts/setUserRole.ts"
+    "user:set-role": "tsx src/scripts/setUserRole.ts",
+    "load:setup": "tsx load-testing/setup.ts",
+    "load:seed": "tsx load-testing/seed.ts",
+    "load:start": "npm run build && node --env-file=.env.load dist/index.js",
+    "load:run": "tsx load-testing/run.ts"
   },
   "dependencies": {
     "argon2": "^0.45.2",
@@ -39,14 +43,18 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/autocannon": "^7.12.7",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^26.5.1",
     "@types/pg": "^8.23.1",
+    "@types/pg-copy-streams": "^1.2.5",
     "@types/supertest": "^7.2.1",
+    "autocannon": "^9.0.0",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",
+    "pg-copy-streams": "^7.0.0",
     "prettier": "^3.9.6",
     "supertest": "^7.2.2",
     "tsx": "^4.23.13",

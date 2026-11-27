@@ -32,6 +32,16 @@ const envSchema = z.object({
   // Only set to false for local HTTP development in browsers that refuse
   // Secure cookies on localhost (such as Safari).
   COOKIE_SECURE: z.stringbool().default(true),
+
+  // Raised only for load testing, where every request comes from one IP.
+  RATE_LIMIT_API_PER_MINUTE: z.coerce.number().int().positive().default(100),
+
+  // Stricter on auth routes to slow down password guessing.
+  RATE_LIMIT_AUTH_PER_MINUTE: z.coerce.number().int().positive().default(20),
+
+  // Connections per app process. Keep processes x this below PostgreSQL's
+  // max_connections.
+  DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
 });
 
 export type Env = z.infer<typeof envSchema>;
