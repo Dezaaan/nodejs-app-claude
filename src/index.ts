@@ -12,6 +12,7 @@ const start = async (): Promise<void> => {
   const container = createContainer(config);
 
   await container.infrastructure.database.healthCheck();
+  await container.infrastructure.redis.connect();
 
   const app = createApp(container);
 

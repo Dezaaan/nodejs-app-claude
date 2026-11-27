@@ -15,6 +15,15 @@ const envSchema = z.object({
         value.startsWith("postgres://") || value.startsWith("postgresql://"),
       "DATABASE_URL must be a PostgreSQL connection string",
     ),
+  // Shared by every app copy. The database number at the end (/0, /1, ...)
+  // keeps dev, test and load-test data apart.
+  REDIS_URL: z
+    .string()
+    .refine(
+      (value) => value.startsWith("redis://") || value.startsWith("rediss://"),
+      "REDIS_URL must be a Redis connection string",
+    ),
+
   CLIENT_ORIGIN: z.url(),
 
   TRUST_PROXY_HOPS: z.coerce.number().int().nonnegative().default(0),

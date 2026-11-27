@@ -3,11 +3,11 @@ import cors from "cors";
 import express from "express";
 import helmet from "helmet";
 import type { AppContainer } from "./app/container.types.js";
+import { createRateLimiter } from "./shared/http/createRateLimiter.js";
 import { createErrorMiddleware } from "./shared/errors/errorMiddleware.js";
 import { createRequestLoggingMiddleware } from "./shared/http/requestLoggingMiddleware.js";
 import { createRoutes } from "./routes/createRoutes.js";
 import { notFoundMiddleware } from "./shared/errors/notFoundMiddleware.js";
-import { rateLimit } from "express-rate-limit";
 import { requestIdMiddleware } from "./shared/http/requestIdMiddleware.js";
 
 export const createApp = (container: AppContainer) => {
@@ -16,11 +16,12 @@ export const createApp = (container: AppContainer) => {
   // Rate limiting needs the real client IP when running behind a proxy.
   app.set("trust proxy", container.config.app.trustProxyHops);
 
-  const apiRateLimiter = rateLimit({
-    windowMs: 60_000,
+  const apiRateLimiter = createRateLimiter({
+    name: "api",
     limit: container.config.rateLimit.apiPerMinute,
-    standardHeaders: true,
-    legacyHeaders: false,
+    windowMs: 60_000,
+    redis: container.infrastructure.redis,
+    logger: container.infrastructure.logger,
   });
 
   app.use(createRequestLoggingMiddleware(container.infrastructure.logger));
@@ -48,17 +49,22 @@ export const createApp = (container: AppContainer) => {
   });
 
   app.get("/ready", async (_request, response) => {
-    try {
-      await container.infrastructure.database.healthCheck();
+    const { database, redis } = container.infrastructure;
 
-      response.status(200).json({
-        status: "ready",
-      });
-    } catch {
-      response.status(503).json({
-        status: "not_ready",
-      });
-    }
+    // Redis is reported but doesn't decide readiness: without it the app
+    // still works (only without rate limits), and taking every copy out of
+    // the load balancer during a Redis outage would stop all traffic.
+    const [databaseCheck, redisCheck] = await Promise.allSettled([
+      database.healthCheck(),
+      redis.healthCheck(),
+    ]);
+    const ready = databaseCheck.status === "fulfilled";
+
+    response.status(ready ? 200 : 503).json({
+      status: ready ? "ready" : "not_ready",
+      database: ready ? "up" : "down",
+      redis: redisCheck.status === "fulfilled" ? "up" : "down",
+    });
   });
 
   app.use("/api/v1", apiRateLimiter, createRoutes(container));

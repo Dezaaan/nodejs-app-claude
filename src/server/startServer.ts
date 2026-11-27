@@ -11,7 +11,7 @@ type StartServerDependencies = {
 export const startServer = ({ app, container }: StartServerDependencies) => {
   const {
     config,
-    infrastructure: { database, logger },
+    infrastructure: { database, redis, logger },
     features,
   } = container;
 
@@ -36,14 +36,14 @@ export const startServer = ({ app, container }: StartServerDependencies) => {
 
   let isShuttingDown = false;
 
-  const closeDatabaseAndExit = async (): Promise<void> => {
+  const closeConnectionsAndExit = async (): Promise<void> => {
     try {
       // Let a cleanup in progress finish before its connection goes away.
       await tokenCleanup.stop();
 
-      await database.close();
+      await Promise.all([database.close(), redis.close()]);
 
-      logger.info("Database connection closed");
+      logger.info("Database and Redis connections closed");
 
       logger.info("Application stopped successfully");
 
@@ -85,7 +85,7 @@ export const startServer = ({ app, container }: StartServerDependencies) => {
         process.exit(1);
       }
 
-      void closeDatabaseAndExit();
+      void closeConnectionsAndExit();
     });
   };
 

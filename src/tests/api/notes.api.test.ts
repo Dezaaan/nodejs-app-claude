@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import request from "supertest";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../app.js";
 import {
   registerTestUser,
@@ -33,8 +33,13 @@ describe("Notes API", () => {
     user = await registerTestUser(app);
   });
 
+  beforeAll(async () => {
+    await container.infrastructure.redis.connect();
+  });
+
   afterAll(async () => {
     await container.infrastructure.database.close();
+    await container.infrastructure.redis.close();
   });
 
   it("requires an access token", async () => {

@@ -10,6 +10,9 @@ export type AppConfig = {
     url: string;
     poolMax: number;
   };
+  redis: {
+    url: string;
+  };
   cors: {
     origin: string;
   };
@@ -37,6 +40,9 @@ export const createConfig = (env: Env): AppConfig => ({
   database: {
     url: env.DATABASE_URL,
     poolMax: env.DATABASE_POOL_MAX,
+  },
+  redis: {
+    url: env.REDIS_URL,
   },
   cors: {
     // Normalized (no trailing slash) so it matches the browser's Origin header.

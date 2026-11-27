@@ -1,6 +1,6 @@
 import { SignJWT } from "jose";
 import request from "supertest";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../app.js";
 import {
   getRefreshCookie,
@@ -19,8 +19,13 @@ describe("Auth API", () => {
     await resetDatabase(container.infrastructure.database);
   });
 
+  beforeAll(async () => {
+    await container.infrastructure.redis.connect();
+  });
+
   afterAll(async () => {
     await container.infrastructure.database.close();
+    await container.infrastructure.redis.close();
   });
 
   describe("register", () => {
