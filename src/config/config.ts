@@ -11,6 +11,9 @@ export type AppConfig = {
     poolMax: number;
     statementTimeoutMs: number;
   };
+  redis: {
+    url: string;
+  };
   cors: {
     origin: string;
   };
@@ -39,6 +42,9 @@ export const createConfig = (env: Env): AppConfig => ({
     url: env.DATABASE_URL,
     poolMax: env.DATABASE_POOL_MAX,
     statementTimeoutMs: env.DATABASE_STATEMENT_TIMEOUT_MS,
+  },
+  redis: {
+    url: env.REDIS_URL,
   },
   cors: {
     // Normalized (no trailing slash) so it matches the browser's Origin header.
