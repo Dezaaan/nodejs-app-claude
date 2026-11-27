@@ -1,11 +1,18 @@
-import { createNotesService } from "../../features/notes/notes.service.js";
+import { decodeNotesCursor } from "../../features/notes/notes.cursor.js";
+import {
+  createNotesService,
+  MAX_COUNTED_NOTES,
+} from "../../features/notes/notes.service.js";
 import type { NotesRepository } from "../../features/notes/notes.repository.js";
+import type { NotesQueryOptions } from "../../features/notes/notes.types.js";
 import { createTestLogger } from "../helpers/createTestLogger.js";
 import { describe, expect, it, vi } from "vitest";
 
 const USER_ID = "user-1";
+const NOTE_ID = "3f2b8c1e-6d4a-4e9b-9a7c-2d1e0f5b6a71";
 
 const createTestRepository = (): NotesRepository => ({
+  countMany: vi.fn(),
   create: vi.fn(),
   deleteById: vi.fn(),
   findMany: vi.fn(),
@@ -27,7 +34,7 @@ describe("NotesService", () => {
 
     const notes = [
       {
-        id: "1",
+        id: NOTE_ID,
         userId: USER_ID,
         title: "First note",
         content: "Content",
@@ -38,15 +45,17 @@ describe("NotesService", () => {
 
     vi.mocked(repository.findMany).mockResolvedValue({
       items: notes,
-      totalItems: 21,
+      hasMore: true,
     });
+    vi.mocked(repository.countMany).mockResolvedValue(21);
 
-    const options = {
-      page: 1,
+    const options: NotesQueryOptions = {
       pageSize: 20,
       sortBy: "createdAt",
       sortOrder: "desc",
-    } as const;
+      search: "first",
+      position: { kind: "page", page: 1 },
+    };
 
     const result = await service.getNotes(USER_ID, options);
 
@@ -57,12 +66,77 @@ describe("NotesService", () => {
         pageSize: 20,
         totalItems: 21,
         totalPages: 2,
+        totalItemsCapped: false,
+        nextCursor: expect.any(String),
       },
     });
     expect(repository.findMany).toHaveBeenCalledExactlyOnceWith(
       USER_ID,
       options,
     );
+    expect(repository.countMany).toHaveBeenCalledExactlyOnceWith(
+      USER_ID,
+      { search: "first" },
+      MAX_COUNTED_NOTES + 1,
+    );
+
+    // The cursor continues right after the page's last note, with the same
+    // sort and search.
+    const { nextCursor } = result.pagination;
+    expect(decodeNotesCursor(nextCursor!)).toEqual({
+      sortBy: "createdAt",
+      sortOrder: "desc",
+      search: "first",
+      value: notes[0]!.createdAt.toISOString(),
+      id: NOTE_ID,
+    });
+  });
+
+  it("caps the total when there are more notes than it counts", async () => {
+    const { repository, service } = createService();
+
+    vi.mocked(repository.findMany).mockResolvedValue({
+      items: [],
+      hasMore: false,
+    });
+    vi.mocked(repository.countMany).mockResolvedValue(MAX_COUNTED_NOTES + 1);
+
+    const result = await service.getNotes(USER_ID, {
+      pageSize: 20,
+      sortBy: "createdAt",
+      sortOrder: "desc",
+      position: { kind: "page", page: 1 },
+    });
+
+    expect(result.pagination).toMatchObject({
+      totalItems: MAX_COUNTED_NOTES,
+      totalPages: MAX_COUNTED_NOTES / 20,
+      totalItemsCapped: true,
+      nextCursor: null,
+    });
+  });
+
+  it("doesn't count for cursor pages", async () => {
+    const { repository, service } = createService();
+
+    vi.mocked(repository.findMany).mockResolvedValue({
+      items: [],
+      hasMore: false,
+    });
+
+    const result = await service.getNotes(USER_ID, {
+      pageSize: 20,
+      sortBy: "title",
+      sortOrder: "asc",
+      position: {
+        kind: "after",
+        value: "Some title",
+        id: "00000000-0000-4000-8000-000000000000",
+      },
+    });
+
+    expect(result.pagination).toEqual({ pageSize: 20, nextCursor: null });
+    expect(repository.countMany).not.toHaveBeenCalled();
   });
 
   it("updates only the provided fields, without reading first", async () => {

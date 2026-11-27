@@ -7,6 +7,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import autocannon from "autocannon";
 import { SignJWT } from "jose";
+import { encodeNotesCursor } from "../src/features/notes/notes.cursor.js";
 import {
   createRandom,
   emailFor,
@@ -100,6 +101,29 @@ const createTokenPool = async (size: number, maxIndex: number) => {
 const users = await createTokenPool(TOKEN_POOL_SIZE, userCount);
 const heavyUsers = await createTokenPool(HEAVY_USERS, HEAVY_USERS);
 
+// Common words, a word no note contains, and two-word phrases, which match
+// many notes by trigram but few in full.
+const HEAVY_SEARCH_TERMS = [
+  ...SEARCH_TERMS,
+  "xyzzy",
+  "berlin tokyo",
+  "budget review",
+];
+
+const SEEDED_PERIOD_MS = 2 * 365 * 86_400_000;
+const SEED_NOW = Date.parse("2026-11-01T00:00:00.000Z");
+
+// A cursor pointing somewhere in the seeded two years, as if the client had
+// followed nextCursor that deep. Built with the API's own encoder; the
+// largest id sorts first among notes created in the same millisecond.
+const randomDeepCursor = (): string =>
+  encodeNotesCursor({
+    sortBy: "createdAt",
+    sortOrder: "desc",
+    value: new Date(SEED_NOW - random.next() * SEEDED_PERIOD_MS).toISOString(),
+    id: "ffffffff-ffff-4fff-bfff-ffffffffffff",
+  });
+
 const listNotes = (): Request => ({
   method: "GET",
   path: "/api/v1/notes",
@@ -141,6 +165,23 @@ const scenarios: Record<string, Scenario> = {
     next: () => ({
       method: "GET",
       path: `/api/v1/notes?page=${random.int(1, 500)}`,
+      headers: pick(heavyUsers),
+    }),
+  },
+  "heavy-cursor": {
+    description:
+      "The same users and depths as heavy, using cursors instead of page numbers",
+    next: () => ({
+      method: "GET",
+      path: `/api/v1/notes?cursor=${randomDeepCursor()}`,
+      headers: pick(heavyUsers),
+    }),
+  },
+  "heavy-search": {
+    description: "Users with tens of thousands of notes, searching",
+    next: () => ({
+      method: "GET",
+      path: `/api/v1/notes?search=${encodeURIComponent(pick(HEAVY_SEARCH_TERMS))}`,
       headers: pick(heavyUsers),
     }),
   },

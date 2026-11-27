@@ -1,10 +1,15 @@
-import type { Note, NotesQueryOptions } from "./notes.types.js";
+import type { Note, NotesFilters, NotesQueryOptions } from "./notes.types.js";
 import type { CreateNoteInput, UpdateNoteInput } from "./notes.schema.js";
 import type { Logger } from "../../infrastructure/createLogger.js";
 import { NotFoundError } from "../../shared/errors/NotFoundError.js";
 import type { NotesRepository } from "./notes.repository.js";
 import type { PaginatedResult } from "../../shared/pagination/pagination.types.js";
-import { createPaginatedResult } from "../../shared/pagination/createPaginatedResult.js";
+import { cursorAfter } from "./notes.cursor.js";
+
+// Page-number responses count matching notes up to this many. Counting
+// costs as much as reading every match: for a user with 59,000 notes an
+// exact count took 47 ms, and 590 ms with a search.
+export const MAX_COUNTED_NOTES = 1_000;
 
 // Every method acts on behalf of one user. Another user's note is reported as
 // not found, so its existence isn't revealed.
@@ -36,19 +41,52 @@ export const createNotesService = ({
     userId: string,
     options: NotesQueryOptions,
   ): Promise<PaginatedResult<Note>> => {
-    const { items, totalItems } = await notesRepository.findMany(
-      userId,
-      options,
-    );
+    const { position, pageSize } = options;
+    const filters: NotesFilters = {
+      ...(options.search !== undefined && { search: options.search }),
+      ...(options.title !== undefined && { title: options.title }),
+    };
 
-    return createPaginatedResult({
+    const nextCursorFor = (items: Note[], hasMore: boolean) => {
+      const last = items.at(-1);
+
+      return hasMore && last ? cursorAfter(last, options, filters) : null;
+    };
+
+    if (position.kind === "after") {
+      // Cursor pages have no total: skipping the count is what keeps every
+      // page as cheap as the first.
+      const { items, hasMore } = await notesRepository.findMany(
+        userId,
+        options,
+      );
+
+      return {
+        items,
+        pagination: { pageSize, nextCursor: nextCursorFor(items, hasMore) },
+      };
+    }
+
+    // One more than the limit shows whether the total was cut off.
+    const [{ items, hasMore }, counted] = await Promise.all([
+      notesRepository.findMany(userId, options),
+      notesRepository.countMany(userId, filters, MAX_COUNTED_NOTES + 1),
+    ]);
+
+    const totalItemsCapped = counted > MAX_COUNTED_NOTES;
+    const totalItems = Math.min(counted, MAX_COUNTED_NOTES);
+
+    return {
       items,
-      totalItems,
       pagination: {
-        page: options.page,
-        pageSize: options.pageSize,
+        page: position.page,
+        pageSize,
+        totalItems,
+        totalPages: Math.ceil(totalItems / pageSize),
+        totalItemsCapped,
+        nextCursor: nextCursorFor(items, hasMore),
       },
-    });
+    };
   };
 
   const getNoteById = async (userId: string, id: string): Promise<Note> => {

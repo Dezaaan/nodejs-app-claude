@@ -1,6 +1,7 @@
 import type { ErrorRequestHandler } from "express";
 import { z, ZodError } from "zod";
 import type { Logger } from "../../infrastructure/createLogger.js";
+import { isDatabaseBusyError } from "../../infrastructure/database/isDatabaseBusyError.js";
 import { AppError } from "./AppError.js";
 
 // Errors raised by express.json() (malformed JSON, body too large, ...)
@@ -57,6 +58,24 @@ export const createErrorMiddleware = (logger: Logger): ErrorRequestHandler => {
           message: isTooLarge
             ? "Request body is too large"
             : "Request could not be processed",
+        },
+      });
+
+      return;
+    }
+
+    if (isDatabaseBusyError(error)) {
+      logger.warn("Database too busy to answer in time", {
+        error,
+        method: request.method,
+        path: request.originalUrl,
+      });
+
+      response.setHeader("Retry-After", "1");
+      response.status(503).json({
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message: "The service is busy, try again shortly",
         },
       });
 

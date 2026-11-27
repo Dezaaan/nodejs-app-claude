@@ -1,6 +1,11 @@
 import type { Database } from "../../infrastructure/database/database.types.js";
 import type { NotesRepository } from "./notes.repository.js";
-import type { Note, NotesQueryOptions, UpdateNoteData } from "./notes.types.js";
+import type {
+  Note,
+  NotesFilters,
+  NotesQueryOptions,
+  UpdateNoteData,
+} from "./notes.types.js";
 
 type NoteRow = Pick<Note, "id" | "title" | "content"> & {
   user_id: string;
@@ -33,76 +38,113 @@ const sortColumnMap = {
 const toContainsPattern = (value: string): string =>
   `%${value.replace(/[\\%_]/g, "\\$&")}%`;
 
+// Builds the WHERE conditions shared by the page and count queries. Every
+// condition starts with user_id, which all notes indexes lead with.
+const buildFilters = (userId: string, filters: NotesFilters) => {
+  const params: unknown[] = [userId];
+  const conditions: string[] = ["user_id = $1"];
+
+  if (filters.search) {
+    params.push(toContainsPattern(filters.search));
+
+    conditions.push(
+      `(title ILIKE $${params.length} OR content ILIKE $${params.length})`,
+    );
+  }
+
+  if (filters.title) {
+    params.push(toContainsPattern(filters.title));
+
+    conditions.push(`title ILIKE $${params.length}`);
+  }
+
+  return { params, conditions };
+};
+
 export const createPostgresNotesRepository = ({
   database,
 }: CreatePostgresNotesRepositoryDependencies): NotesRepository => {
   const findMany = async (userId: string, options: NotesQueryOptions) => {
-    const offset = (options.page - 1) * options.pageSize;
+    const { params, conditions } = buildFilters(userId, options);
 
-    const params: unknown[] = [userId];
-    const conditions: string[] = ["user_id = $1"];
+    const sortColumn = sortColumnMap[options.sortBy];
+    const descending = options.sortOrder === "desc";
+    const sortOrder = descending ? "DESC" : "ASC";
+    const { position } = options;
 
-    if (options.search) {
-      params.push(toContainsPattern(options.search));
+    if (position.kind === "after") {
+      // Keyset pagination: start right after the cursor's note. The index on
+      // (user_id, <sort column>, id) finds that spot directly, so page 1,000
+      // costs the same as page 1.
+      params.push(position.value, position.id);
 
-      const parameterIndex = params.length;
+      const valueParam =
+        options.sortBy === "title"
+          ? `$${params.length - 1}`
+          : `$${params.length - 1}::timestamptz`;
 
       conditions.push(
-        `(
-          title ILIKE $${parameterIndex}
-          OR content ILIKE $${parameterIndex}
-        )`,
+        `(${sortColumn}, id) ${descending ? "<" : ">"} (${valueParam}, $${params.length}::uuid)`,
       );
     }
 
-    if (options.title) {
-      params.push(toContainsPattern(options.title));
+    // One extra row tells whether another page follows.
+    params.push(options.pageSize + 1);
+    const limitParam = `$${params.length}`;
 
-      conditions.push(`title ILIKE $${params.length}`);
+    let offsetClause = "";
+
+    if (position.kind === "page") {
+      // OFFSET still reads and skips every earlier row: fine for the first
+      // pages, slow deep into a large list. Cursors avoid that.
+      params.push((position.page - 1) * options.pageSize);
+      offsetClause = `OFFSET $${params.length}`;
     }
 
-    const whereClause = `WHERE ${conditions.join(" AND ")}`;
-
-    const sortColumn = sortColumnMap[options.sortBy];
-
-    const sortOrder = options.sortOrder === "asc" ? "ASC" : "DESC";
-
-    params.push(options.pageSize);
-    const limitIndex = params.length;
-
-    params.push(offset);
-    const offsetIndex = params.length;
-
-    const notesResult = await database.query<NoteRow>(
+    const result = await database.query<NoteRow>(
       `
-          SELECT ${NOTE_COLUMNS}
-          FROM notes
-          ${whereClause}
-          ORDER BY ${sortColumn} ${sortOrder}, id ${sortOrder}
-          LIMIT $${limitIndex}
-          OFFSET $${offsetIndex}
-        `,
+        SELECT ${NOTE_COLUMNS}
+        FROM notes
+        WHERE ${conditions.join(" AND ")}
+        ORDER BY ${sortColumn} ${sortOrder}, id ${sortOrder}
+        LIMIT ${limitParam}
+        ${offsetClause}
+      `,
       params,
     );
 
-    const countParams = params.slice(0, -2);
-
-    const countResult = await database.query<{
-      count: string;
-    }>(
-      `
-          SELECT COUNT(*) AS count
-          FROM notes
-          ${whereClause}
-        `,
-      countParams,
-    );
+    const hasMore = result.rows.length > options.pageSize;
+    const rows = hasMore ? result.rows.slice(0, options.pageSize) : result.rows;
 
     return {
-      items: notesResult.rows.map(mapNoteRowToDomain),
-
-      totalItems: Number(countResult.rows[0]?.count ?? 0),
+      items: rows.map(mapNoteRowToDomain),
+      hasMore,
     };
+  };
+
+  const countMany = async (
+    userId: string,
+    filters: NotesFilters,
+    limit: number,
+  ): Promise<number> => {
+    const { params, conditions } = buildFilters(userId, filters);
+
+    params.push(limit);
+
+    const result = await database.query<{ count: number }>(
+      `
+        SELECT count(*)::int AS count
+        FROM (
+          SELECT 1
+          FROM notes
+          WHERE ${conditions.join(" AND ")}
+          LIMIT $${params.length}
+        ) AS limited
+      `,
+      params,
+    );
+
+    return result.rows[0]?.count ?? 0;
   };
 
   const findById = async (userId: string, id: string): Promise<Note | null> => {
@@ -178,6 +220,7 @@ export const createPostgresNotesRepository = ({
   };
 
   return {
+    countMany,
     create,
     deleteById,
     findMany,

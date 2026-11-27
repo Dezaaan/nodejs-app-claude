@@ -40,7 +40,27 @@ To browse the database, run `docker compose up -d adminer` and open http://local
 | `PATCH`  | `/api/v1/notes/:id`     | Update a title and/or content         |
 | `DELETE` | `/api/v1/notes/:id`     | Delete a note                         |
 
-`GET /api/v1/notes` accepts `page`, `pageSize` (up to 100), `search`, `title`, `sortBy` (`createdAt`, `updatedAt` or `title`) and `sortOrder` (`asc` or `desc`).
+`GET /api/v1/notes` accepts `pageSize` (up to 100, default 20), `search` (title or content), `title`, `sortBy` (`createdAt`, `updatedAt` or `title`; default `createdAt`) and `sortOrder` (`asc` or `desc`; default `desc`).
+
+### Pagination
+
+There are two ways to page through notes:
+
+- **Page numbers:** `?page=3`. Good for a numbered pager. The total is counted only up to 1,000 notes: above that, `totalItems` is 1,000 and `totalItemsCapped` is `true`, so show "1,000+". Pages deep into a large list get slower, because the database still reads every earlier note.
+- **Cursors:** `?cursor=<nextCursor from the previous response>`. Good for "load more" and infinite scroll. Every page is as fast as the first, at any depth, but there is no total and no jumping to page N.
+
+```jsonc
+// GET /api/v1/notes?pageSize=20
+"pagination": {
+  "page": 1, "pageSize": 20, "totalItems": 1000, "totalPages": 50,
+  "totalItemsCapped": true, "nextCursor": "eyJzb3J0Qnki..."
+}
+
+// GET /api/v1/notes?pageSize=20&cursor=eyJzb3J0Qnki...
+"pagination": { "pageSize": 20, "nextCursor": "eyJzb3J0Qnki..." }
+```
+
+`nextCursor` is `null` on the last page. Every response includes it, so a client can start with page numbers and continue with cursors. A cursor remembers the sort and search it was made for: send it alone, or with the same query. A different `search`, `title`, `sortBy` or `sortOrder` returns 400 `CURSOR_MISMATCH`, an unreadable cursor returns 400 `INVALID_CURSOR`, and `page` together with `cursor` returns 400 `VALIDATION_ERROR`.
 
 All notes routes require an access token and a permission (see [Roles and permissions](#roles-and-permissions)). Another user's note returns 404, as if it didn't exist.
 
@@ -96,21 +116,24 @@ The frontend should use `permissions` only to show or hide actions. Check permis
 
 ## Configuration
 
-| Variable                     | Required | Default       | Description                                                             |
-| ---------------------------- | -------- | ------------- | ----------------------------------------------------------------------- |
-| `DATABASE_URL`               | Yes      |               | PostgreSQL connection string                                            |
-| `CLIENT_ORIGIN`              | Yes      |               | Frontend origin, allowed by CORS and the auth routes                    |
-| `JWT_SECRET`                 | Yes      |               | Access token signing key, at least 32 characters                        |
-| `ACCESS_TOKEN_TTL_SECONDS`   | No       | `900`         | Access token lifetime                                                   |
-| `REFRESH_TOKEN_TTL_DAYS`     | No       | `30`          | Refresh token lifetime                                                  |
-| `COOKIE_SECURE`              | No       | `true`        | Set to `false` only for local HTTP development in browsers that need it |
-| `NODE_ENV`                   | No       | `development` | `development`, `test` or `production`                                   |
-| `PORT`                       | No       | `4000`        | HTTP port                                                               |
-| `TRUST_PROXY_HOPS`           | No       | `0`           | Number of reverse proxies in front of the app                           |
-| `LOG_LEVEL`                  | No       | `info`        | `debug`, `info`, `warn`, `error` or `silent`                            |
-| `DATABASE_POOL_MAX`          | No       | `10`          | Database connections per app process                                    |
-| `RATE_LIMIT_API_PER_MINUTE`  | No       | `100`         | Requests per minute per IP on `/api/v1`                                 |
-| `RATE_LIMIT_AUTH_PER_MINUTE` | No       | `20`          | Requests per minute per IP on `/api/v1/auth`                            |
+| Variable                        | Required | Default       | Description                                                             |
+| ------------------------------- | -------- | ------------- | ----------------------------------------------------------------------- |
+| `DATABASE_URL`                  | Yes      |               | PostgreSQL connection string                                            |
+| `CLIENT_ORIGIN`                 | Yes      |               | Frontend origin, allowed by CORS and the auth routes                    |
+| `JWT_SECRET`                    | Yes      |               | Access token signing key, at least 32 characters                        |
+| `ACCESS_TOKEN_TTL_SECONDS`      | No       | `900`         | Access token lifetime                                                   |
+| `REFRESH_TOKEN_TTL_DAYS`        | No       | `30`          | Refresh token lifetime                                                  |
+| `COOKIE_SECURE`                 | No       | `true`        | Set to `false` only for local HTTP development in browsers that need it |
+| `NODE_ENV`                      | No       | `development` | `development`, `test` or `production`                                   |
+| `PORT`                          | No       | `4000`        | HTTP port                                                               |
+| `TRUST_PROXY_HOPS`              | No       | `0`           | Number of reverse proxies in front of the app                           |
+| `LOG_LEVEL`                     | No       | `info`        | `debug`, `info`, `warn`, `error` or `silent`                            |
+| `DATABASE_POOL_MAX`             | No       | `10`          | Database connections per app process                                    |
+| `DATABASE_STATEMENT_TIMEOUT_MS` | No       | `5000`        | PostgreSQL cancels queries that run longer                              |
+| `RATE_LIMIT_API_PER_MINUTE`     | No       | `100`         | Requests per minute per IP on `/api/v1`                                 |
+| `RATE_LIMIT_AUTH_PER_MINUTE`    | No       | `20`          | Requests per minute per IP on `/api/v1/auth`                            |
+
+When a query hits the statement timeout, or no database connection frees up within 5 seconds, the API answers 503 `SERVICE_UNAVAILABLE` with `Retry-After: 1` instead of 500. A traffic spike then slows clients down instead of tying up the database.
 
 Behind a reverse proxy, set `TRUST_PROXY_HOPS`. Otherwise all clients share one rate limit.
 
@@ -153,22 +176,24 @@ Rows are streamed into PostgreSQL's `COPY` and the indexes are rebuilt afterward
 
 `load:run` sends requests at a fixed rate and reports the rate it reached, latency percentiles and failures. Results are saved to `load-testing/results/`.
 
-| Option          | Default   | Description                                            |
-| --------------- | --------- | ------------------------------------------------------ |
-| `--scenario`    | `mixed`   | `list`, `search`, `write`, `heavy`, `mixed` or `login` |
-| `--rate`        | `2000`    | Requests per second                                    |
-| `--duration`    | `30`      | Seconds, after a 5-second warmup                       |
-| `--connections` | `200`     | Requests in flight at once                             |
-| `--users`       | `5000000` | Must match the `--users` used for `load:seed`          |
+| Option          | Default   | Description                                   |
+| --------------- | --------- | --------------------------------------------- |
+| `--scenario`    | `mixed`   | See the scenario table below                  |
+| `--rate`        | `2000`    | Requests per second                           |
+| `--duration`    | `30`      | Seconds, after a 5-second warmup              |
+| `--connections` | `200`     | Requests in flight at once                    |
+| `--users`       | `5000000` | Must match the `--users` used for `load:seed` |
 
-| Scenario | What it sends                                                     |
-| -------- | ----------------------------------------------------------------- |
-| `list`   | First page of notes for random users                              |
-| `search` | Searches for random users                                         |
-| `write`  | Creates notes                                                     |
-| `heavy`  | Users with the most notes, on pages 1 to 500                      |
-| `mixed`  | 80% list, 10% search, 10% create                                  |
-| `login`  | Logins. argon2 is slow on purpose, so use a rate like `--rate 20` |
+| Scenario       | What it sends                                                     |
+| -------------- | ----------------------------------------------------------------- |
+| `list`         | First page of notes for random users                              |
+| `search`       | Searches for random users                                         |
+| `write`        | Creates notes                                                     |
+| `heavy`        | Users with the most notes, on pages 1 to 500                      |
+| `heavy-cursor` | The same users and depths as `heavy`, by cursor                   |
+| `heavy-search` | Users with the most notes, searching words and phrases            |
+| `mixed`        | 80% list, 10% search, 10% create                                  |
+| `login`        | Logins. argon2 is slow on purpose, so use a rate like `--rate 20` |
 
 The test signs access tokens for 5,000 random users itself instead of logging them in. The load generator runs on the same machine as the API and database, so treat the numbers as a way to compare changes, not as production capacity.
 

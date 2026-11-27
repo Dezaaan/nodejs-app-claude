@@ -42,6 +42,14 @@ const envSchema = z.object({
   // Connections per app process. Keep processes x this below PostgreSQL's
   // max_connections.
   DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
+
+  // PostgreSQL cancels any query running longer, so one slow query can't
+  // hold a connection and a CPU core indefinitely.
+  DATABASE_STATEMENT_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(5_000),
 });
 
 export type Env = z.infer<typeof envSchema>;

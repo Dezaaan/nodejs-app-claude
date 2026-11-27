@@ -11,7 +11,9 @@ export const createDatabase = (
   const pool = new Pool({
     connectionString: config.url,
     max: config.poolMax,
+    // How long a request waits for a free connection before giving up.
     connectionTimeoutMillis: 5_000,
+    statement_timeout: config.statementTimeoutMs,
   });
 
   // Without a listener, an idle client error crashes the process.

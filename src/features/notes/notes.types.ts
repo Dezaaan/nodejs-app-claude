@@ -17,13 +17,23 @@ export type NotesSortField = "createdAt" | "updatedAt" | "title";
 
 export type SortOrder = "asc" | "desc";
 
-export type NotesQueryOptions = {
-  page: number;
-  pageSize: number;
-
-  search?: string;
-  title?: string;
-
+export type NotesSort = {
   sortBy: NotesSortField;
   sortOrder: SortOrder;
 };
+
+export type NotesFilters = {
+  // Matches title or content.
+  search?: string;
+  title?: string;
+};
+
+// Where a page starts: a page number, or right after a given note (cursor).
+export type NotesPosition =
+  { kind: "page"; page: number } | { kind: "after"; value: string; id: string };
+
+export type NotesQueryOptions = NotesSort &
+  NotesFilters & {
+    pageSize: number;
+    position: NotesPosition;
+  };

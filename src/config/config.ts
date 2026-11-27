@@ -9,6 +9,7 @@ export type AppConfig = {
   database: {
     url: string;
     poolMax: number;
+    statementTimeoutMs: number;
   };
   cors: {
     origin: string;
@@ -37,6 +38,7 @@ export const createConfig = (env: Env): AppConfig => ({
   database: {
     url: env.DATABASE_URL,
     poolMax: env.DATABASE_POOL_MAX,
+    statementTimeoutMs: env.DATABASE_STATEMENT_TIMEOUT_MS,
   },
   cors: {
     // Normalized (no trailing slash) so it matches the browser's Origin header.
